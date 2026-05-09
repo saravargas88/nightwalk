@@ -92,10 +92,14 @@ if len(day_df) == 0:
     raise RuntimeError("No candidate images remain after filtering. Check your paths and column names.")
 
 # ── Spatial binning ───────────────────────────────────────────────────────────
+before = len(day_df)
+day_df = day_df.dropna(subset=["snapped_lat", "snapped_lon"]).copy()
+day_df = day_df[np.isfinite(day_df["snapped_lat"]) & np.isfinite(day_df["snapped_lon"])].copy()
+print(f"  Dropped {before - len(day_df):,} rows with missing/invalid coordinates")
+
 day_df["lat_bin"]   = (day_df["snapped_lat"] / LAT_BIN_SIZE).round().astype(int)
 day_df["lon_bin"]   = (day_df["snapped_lon"] / LON_BIN_SIZE).round().astype(int)
 day_df["grid_cell"] = day_df["lat_bin"].astype(str) + "_" + day_df["lon_bin"].astype(str)
-
 print(f"\nSpatial grid cells: {day_df['grid_cell'].nunique():,}")
 print(f"Android IDs (vehicle routes): {day_df['android_id'].nunique():,}")
 
