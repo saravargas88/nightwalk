@@ -449,6 +449,7 @@ class MapMatcherWindow(QMainWindow):
         if idx:
             row_idx = idx[0]
             for col, val in updates.items():
+                df_out[col] = df_out[col].astype(object)
                 df_out.at[row_idx, col] = val
             df_out.to_csv(self.output_path, index=False)
         else:

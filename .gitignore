@@ -8,6 +8,7 @@
 *.xmp
 /daytime
 .DS_Store
+*.zip
 
 .claude
 image_map.html
