@@ -1,0 +1,51 @@
+While training, it went to 45 epochs and then threw this:
+
+Epoch 45/100:  51%|██████████████████████████████████████████████████▎                                               | 175/341 [00:16<00:15, 10.86batch/s, loss=0.0439]
+Traceback (most recent call last):
+  File "/home/bia/NightWalk/model-training/train_efficientnet_multihead.py", line 256, in <module>
+    train()
+  File "/home/bia/NightWalk/model-training/train_efficientnet_multihead.py", line 197, in train
+    for images, labels in pbar:
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/tqdm/std.py", line 1181, in __iter__
+    for obj in iterable:
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 741, in __next__
+    data = self._next_data()
+           ^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1518, in _next_data
+    return self._process_data(data, worker_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1586, in _process_data
+Processing: ../urban-mosaic/washington-square/0/20160705/fef3036e3fbdf4ec/cds-fef3036e3fbdf4ec-20160705-0820.raw/4/dr5rsp4tjc8e-dr5rsp4tj6u6-cds-fef3036e3fbdf4ec-20160705-0820-171.jpg
+    data.reraise()
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/_utils.py", line 785, in reraise
+    raise exception
+TypeError: Caught TypeError in DataLoader worker process 7.
+Original Traceback (most recent call last):
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/_utils/worker.py", line 358, in _worker_loop
+    data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/_utils/fetch.py", line 54, in fetch
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/_utils/fetch.py", line 54, in <listcomp>
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+            ~~~~~~~~~~~~^^^^^
+  File "/home/bia/NightWalk/model-training/train_efficientnet_multihead.py", line 85, in __getitem__
+    image = self.transform(image)
+            ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torchvision/transforms/transforms.py", line 95, in __call__
+    img = t(img)
+          ^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torchvision/transforms/transforms.py", line 137, in __call__
+    return F.to_tensor(pic)
+           ^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torchvision/transforms/functional.py", line 168, in to_tensor
+    img = torch.from_numpy(np.array(pic, mode_to_nptype.get(pic.mode, np.uint8), copy=True))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: int() argument must be a string, a bytes-like object or a real number, not 'Image'
+
+Processing: ../urban-mosaic/washington-square/0/20161029/ea91d096e3932939/cds-ea91d096e3932939-20161029-1349.raw/4/dr5rspmbn951-dr5rspjzztmv-cds-ea91d096e3932939-20161029-1349-138.jpg
+Processing: ../urban-mosaic/washington-square/0/20160921/fdeb4f0c0eb1bc3c/cds-fdeb4f0c0eb1bc3c-20160921-1642.raw/3/dr5rsnzxxy0x-dr5rsnzxx6xj-cds-fdeb4f0c0eb1bc3c-20160921-1642-43.jpg
+Processing: ../urban-mosaic/washington-square/0/20160816/fdeb4f0c0eb1bc3c/cds-fdeb4f0c0eb1bc3c-20160816-1312.raw/3/dr5rsn774z4x-dr5rsn774zvu-cds-fdeb4f0c0eb1bc3c-20160816-1312-120.jpg
+Processing: ../urban-mosaic/washington-square/0/20161219/6fef7e6f017c3f89/cds-6fef7e6f017c3f89-20161219-0933.raw/3/dr5rspk6pq89-dr5rspkd2n90-cds-6fef7e6f017c3f89-20161219-0933-23.jpg
+Processing: ../urban-mosaic/washington-square/0/20161215/e5df139233770dec/cds-e5df139233770dec-20161215-1045.raw/4/dr5rsp58ed91-dr5rsp58kvk6-cds-e5df139233770dec-20161215-1045-66.jpg
