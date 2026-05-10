@@ -1,0 +1,28 @@
+Regression Report — DINO counts → night grayscale luminance
+Ground truth: mean grayscale pixel value of night photo
+Features: ['tree', 'streetlight', 'storefront']
+N: 150
+Best model: Ridge  (R²=0.2552)
+
+── LinearRegression (LOO-CV) ──────────────────────────
+  R²:   0.2550
+  RMSE: 22.1293
+          tree: -9.6950
+   streetlight: +2.0897
+    storefront: +11.1220
+     intercept: +77.1778
+
+── Ridge (LOO-CV) ──────────────────────────
+  R²:   0.2552
+  RMSE: 22.1265
+          tree: -9.6029
+   streetlight: +2.0303
+    storefront: +11.0382
+     intercept: +77.1778
+
+── RandomForest (LOO-CV) ──────────────────────────
+  R²:   0.1506
+  RMSE: 23.6295
+          tree importance: 0.4421
+   streetlight importance: 0.1704
+    storefront importance: 0.3875

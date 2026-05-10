@@ -27,7 +27,7 @@ from sklearn.model_selection import train_test_split
 
 # ── Config ────────────────────────────────────────────────────────────────────
 # Path to the DINO counts CSV produced by dino_exps.py
-DINO_CSV    = Path("dino_experiments/dino_counts/dino_counts_informed_prompt_3-pairs.csv")
+DINO_CSV    = Path("dino_counts/dino_counts_informed_prompt_3-pairs.csv")
 # Folder containing the resized day images uploaded to HPC
 IMAGE_DIR   = Path("eff-training-upload")
 SAVE_PATH   = Path("model-training/best_efficientnet_multihead.pt")
@@ -40,7 +40,7 @@ IMAGE_COL   = "image"
 
 N_SAMPLES   = None   # None = use all rows
 BATCH_SIZE  = 64
-NUM_EPOCHS  = 100
+NUM_EPOCHS  = 50
 LR          = 1e-4
 IMG_SIZE    = 512
 NUM_WORKERS = 8
@@ -169,8 +169,6 @@ def train():
     criterion = nn.HuberLoss()
 
     best_val_loss = float("inf")
-    log_path = SAVE_PATH.parent / "training_log.csv"
-    log_rows  = []
 
     for epoch in range(NUM_EPOCHS):
         model.train()
@@ -202,10 +200,6 @@ def train():
         mae     = per_target_mae(all_preds, all_labels, TARGETS)
         mae_str = "  ".join(f"{t}={v:.2f}" for t, v in mae.items())
         print(f"Epoch {epoch+1:03d}/{NUM_EPOCHS}  train={train_loss:.4f}  val={val_loss:.4f}  MAE: {mae_str}")
-
-        log_rows.append({"epoch": epoch + 1, "train_loss": round(train_loss, 6),
-                         "val_loss": round(val_loss, 6), **{f"mae_{k}": round(v, 4) for k, v in mae.items()}})
-        pd.DataFrame(log_rows).to_csv(log_path, index=False)
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
