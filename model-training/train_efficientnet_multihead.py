@@ -24,14 +24,16 @@ from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
 # ── Config ────────────────────────────────────────────────────────────────────
 # Path to the DINO counts CSV produced by dino_exps.py
-DINO_CSV    = Path("dino_experiments/dino_counts/dino_counts_informed_prompt_3-pairs.csv")
+DINO_CSV    = Path("../dino_experiments/dino_counts/dino_efficientnet_train_images.csv")
 # Folder containing the resized day images uploaded to HPC
-IMAGE_DIR   = Path("eff-training-upload")
-SAVE_PATH   = Path("model-training/best_efficientnet_multihead.pt")
-PREDS_DIR   = Path("model-training/val_predictions_multihead")
+IMAGE_DIR = Path("../urban-mosaic/washington-square")
+# Change these to point to the current directory
+SAVE_PATH   = Path("best_efficientnet_multihead.pt")
+PREDS_DIR   = Path("val_predictions_multihead")
 
 # Column names in the DINO CSV that are regression targets
 TARGETS     = ["tree", "streetlight", "storefront"]
@@ -39,7 +41,7 @@ TARGETS     = ["tree", "streetlight", "storefront"]
 IMAGE_COL   = "image"
 
 N_SAMPLES   = None   # None = use all rows
-BATCH_SIZE  = 64
+BATCH_SIZE  = 32
 NUM_EPOCHS  = 100
 LR          = 1e-4
 IMG_SIZE    = 512
@@ -69,9 +71,21 @@ class CountDataset(Dataset):
         from PIL import Image
         row      = self.df.iloc[idx]
         img_path = self.image_dir / row[IMAGE_COL]
-        image    = Image.open(img_path).convert("RGB")
+        print(f"Processing: {img_path}") # Uncomment this to see the filename
+        try:
+            image = Image.open(img_path).convert("RGB")
+            # Force load to catch truncation errors here instead of later
+            image.load() 
+        except Exception as e:
+            print(f"  Warning: Skipping corrupt image {img_path}: {e}")
+            # Create a black dummy image if the file is broken
+            image = Image.new("RGB", (IMG_SIZE, IMG_SIZE), (0, 0, 0))
+
         if self.transform:
             image = self.transform(image)
+        
+        if image.shape != (3, 512, 512):
+            print(f"!!! SHAPE MISMATCH at {img_path}: {image.shape}")
         labels = torch.tensor(row[self.targets].values.astype(np.float32))
         return image, labels
 
@@ -136,6 +150,7 @@ def save_predictions(val_df, all_preds, targets, epoch):
 
 # ── Training loop ─────────────────────────────────────────────────────────────
 def train():
+    torch.cuda.empty_cache()
     df = pd.read_csv(DINO_CSV)
     df[TARGETS] = df[TARGETS].fillna(0)
 
@@ -171,27 +186,44 @@ def train():
     best_val_loss = float("inf")
     log_path = SAVE_PATH.parent / "training_log.csv"
     log_rows  = []
-
+    scaler = torch.amp.GradScaler('cuda')
     for epoch in range(NUM_EPOCHS):
         model.train()
         train_loss = 0.0
-        for images, labels in train_dl:
+        
+        # Wrapped with tqdm for progress visibility
+        pbar = tqdm(train_dl, desc=f"Epoch {epoch+1}/{NUM_EPOCHS}", unit="batch")
+        
+        for images, labels in pbar:
             images, labels = images.to(DEVICE), labels.to(DEVICE)
             optimizer.zero_grad()
-            loss = criterion(model(images), labels)
-            loss.backward()
-            optimizer.step()
+            
+            # Mixed Precision Forward Pass
+            with torch.amp.autocast('cuda'):
+                preds = model(images)
+                loss = criterion(preds, labels)
+            
+            # Mixed Precision Backward Pass
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            
             train_loss += loss.item()
+            
+            # Optional: Update progress bar with current loss
+            pbar.set_postfix(loss=loss.item())
 
+        # Validation Loop remains similar (but use autocast here too!)
         model.eval()
         val_loss, all_preds, all_labels = 0.0, [], []
         with torch.no_grad():
-            for images, labels in val_dl:
-                images, labels = images.to(DEVICE), labels.to(DEVICE)
-                preds = model(images)
-                val_loss += criterion(preds, labels).item()
-                all_preds.append(preds.cpu())
-                all_labels.append(labels.cpu())
+            with torch.amp.autocast('cuda'):
+                for images, labels in val_dl:
+                    images, labels = images.to(DEVICE), labels.to(DEVICE)
+                    preds = model(images)
+                    val_loss += criterion(preds, labels).item()
+                    all_preds.append(preds.cpu())
+                    all_labels.append(labels.cpu())
 
         train_loss /= len(train_dl)
         val_loss   /= len(val_dl)
