@@ -106,12 +106,10 @@ print(f"Android IDs (vehicle routes): {day_df['android_id'].nunique():,}")
 # ── Stage 1: stratified sample by (grid_cell, android_id) ────────────────────
 # Caps images per route-per-cell so no single driver dominates a location
 print(f"\nStage 1: capping at {MAX_PER_STRATUM} images per (grid_cell, android_id)...")
-sampled = (
-    day_df
-    .groupby(["grid_cell", "android_id"], group_keys=False)
-    .apply(lambda g: g.sample(n=min(len(g), MAX_PER_STRATUM), random_state=RANDOM_SEED))
-    .reset_index(drop=True)
-)
+pieces = []
+for (cell, android), group in day_df.groupby(["grid_cell", "android_id"]):
+    pieces.append(group.sample(n=min(len(group), MAX_PER_STRATUM), random_state=RANDOM_SEED))
+sampled = pd.concat(pieces).reset_index(drop=True)
 print(f"  After stage 1: {len(sampled):,} images across {sampled['grid_cell'].nunique():,} cells")
 
 # ── Stage 2: downsample to TARGET_N, preserving geographic spread ─────────────
