@@ -6,9 +6,9 @@ touching this file.
 Modes:
   - grid:   runs all prompts x all thresholds on N_IMAGES sample images,
             saves annotated bounding box images and a summary CSV.
-  - count:  runs a single named prompt on SAMPLES daytime images,
-            saves dino_counts_{RUN_NAME}.csv and dino_counts_{RUN_NAME}.json
-            to dino_counts/ for use in proxy_viewer.html.
+  - count:  runs a single named prompt on all valid day images from
+            all-matches.csv, saves dino_counts_{RUN_NAME}.csv and
+            dino_counts_{RUN_NAME}.json to dino_counts/.
 
 Set MODE below to switch between them.
 """
@@ -43,8 +43,21 @@ THRESHOLDS = [
     {"name": "low",    "box": 0.20, "text": 0.15},
 ]
 
-# Loading data from the pairs file
-day_df = pd.read_csv("../splits/efficientnet_train_images.csv")
+# Load valid pairs from all-matches.csv
+# - skipped == False means a day match was found
+# - drop_duplicates on day_image so DINO processes each day image only once
+_matches_df = pd.read_csv("../splits/all-matches.csv")
+day_df = (
+    _matches_df[
+        (_matches_df["skipped"] == False) &
+        (_matches_df["day_image"].notna()) &
+        (_matches_df["day_image"].str.strip() != "")
+    ]
+    .drop_duplicates(subset=["day_image"]) # type: ignore
+    .rename(columns={"day_image": "image"})
+    .reset_index(drop=True)
+)
+print(f"Valid day images to process: {len(day_df)}")
 
 # Count mode settings
 COUNT_PROMPT_NAME = "informed_prompt_3"  # must match a name in prompts.yaml
@@ -79,15 +92,8 @@ PROMPTS = [
 
 PROMPT_MAP = {p["name"]: p for p in PROMPTS}
 
-# ── Load dataset ──────────────────────────────────────────────────────────────
-# Loading dataset from big one
-# df = pd.read_csv(CSV_PATH)
-# df["hour"] = pd.to_datetime(df["timestamp"], unit="s", utc=True).dt.tz_convert("America/New_York").dt.hour
-# day_df = df[df["hour"] < 19].reset_index(drop=True)
-
 # ── Load model ────────────────────────────────────────────────────────────────
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 processor = AutoProcessor.from_pretrained(MODEL_ID)
 model = AutoModelForZeroShotObjectDetection.from_pretrained(MODEL_ID).to(device)
 print(f"Model loaded: {MODEL_ID} on {device}")
@@ -206,7 +212,7 @@ elif MODE == "count":
         raise ValueError(f"Prompt '{COUNT_PROMPT_NAME}' not found in prompts.yaml")
 
     prompt      = PROMPT_MAP[COUNT_PROMPT_NAME]
-    RUN_NAME    = "efficientnet_train_images"
+    RUN_NAME    = "finetune_pairs"
     OUTPUT_CSV  = COUNTS_DIR / f"dino_{RUN_NAME}.csv"
     OUTPUT_JSON = COUNTS_DIR / f"dino_{RUN_NAME}.json"
 
@@ -214,7 +220,8 @@ elif MODE == "count":
     print(f"Text:       {prompt['text']}")
     print(f"Thresholds: box={THRESHOLD}  text={TEXT_THRESHOLD}")
     print(f"Samples:    {SAMPLES}")
-    print(f"Output:     {OUTPUT_CSV}")
+    print(f"Output CSV: {OUTPUT_CSV}")
+    print(f"Output JSON:{OUTPUT_JSON}")
     print("-" * 60)
 
     day_rows    = day_df.to_dict("records")
@@ -251,11 +258,9 @@ elif MODE == "count":
         ]
 
         output_rows.append({
-            "image":    row["image"],
-            "taken_on": row["taken_on"],
-            "period":   row["period"],
+            "image": row["image"],
             **counts,
-            "run":      RUN_NAME,
+            "run":   RUN_NAME,
         })
 
         processed += 1
@@ -264,7 +269,7 @@ elif MODE == "count":
             "  ".join(f"{k}={v}" for k, v in counts.items())
         )
 
-    fieldnames = ["image", "taken_on", "period"] + list(prompt["patterns"].keys()) + ["run"]
+    fieldnames = ["image"] + list(prompt["patterns"].keys()) + ["run"]
     with open(OUTPUT_CSV, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
