@@ -1,36 +1,18 @@
 """run_experiments.py
 
-Master orchestration script. Runs all backbone conditions × label sizes
-and saves a unified results summary.
-
-Steps:
-  0. Checks that prepare_splits.py has been run (train_split.csv exists)
-  1. Optionally runs self-supervised pretraining (Script 3) if checkpoint missing
-  2. Runs finetune_brightness.py for every condition × label size combination
-  3. Saves results_summary.csv comparing all conditions
+Master orchestration script. Runs all backbone conditions and saves a
+unified results summary including both val and test metrics.
 
 Backbone conditions:
   - imagenet      (pure ImageNet baseline)
-  - dino_counts   (your existing Script 1 checkpoint)
+  - dino_counts   (Script 1 checkpoint)
   - ssl           (self-supervised SimCLR pretraining)
 
-Label sizes: configurable, default [50, 100, 200, 400, 800]
-
 Usage:
-    # Full run (all conditions, all label sizes)
-    python run_experiments.py
-
-    # Skip SSL pretraining if checkpoint already exists
-    python run_experiments.py --skip-ssl-pretrain
-
-    # Only run specific conditions
-    python run_experiments.py --backbones imagenet dino_counts
-
-    # Only run specific label sizes
-    python run_experiments.py --label-sizes 100 400 800
-
-    # Change brightness metric
-    python run_experiments.py --metric luma_mean
+    python run_experiments.py                          # full run
+    python run_experiments.py --skip-ssl-pretrain      # if SSL checkpoint already exists
+    python run_experiments.py --backbones imagenet dino_counts  # subset of conditions
+    python run_experiments.py --metric luma_mean       # different brightness metric
 """
 
 from __future__ import annotations
@@ -44,57 +26,60 @@ from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
-SPLITS_DIR = ROOT / "splits"
-TRAIN_CSV = SPLITS_DIR / "train_split.csv"
-TEST_CSV = SPLITS_DIR / "test_split.csv"
+TRAIN_CSV = ROOT / "splits" / "train_split.csv"
+TEST_CSV = ROOT / "splits" / "test_split.csv"
 SSL_CHECKPOINT = ROOT / "model-training" / "ssl-pretrain" / "best_ssl_backbone.pt"
 OUTPUT_BASE = ROOT / "model-training" / "finetune-runs"
 RESULTS_SUMMARY = ROOT / "model-training" / "results_summary.csv"
 
-# Scripts (assumed to be in same directory as this file)
 SCRIPT_DIR = Path(__file__).resolve().parent
 SSL_SCRIPT = SCRIPT_DIR / "pretrain_selfsupervised.py"
 FINETUNE_SCRIPT = SCRIPT_DIR / "finetune_brightness.py"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 ALL_BACKBONES = ["imagenet", "dino_counts", "ssl"]
-DEFAULT_LABEL_SIZES = [50, 100, 200, 400, 800]
+DEFAULT_N_TRAIN = 800
 DEFAULT_METRIC = "gray_mean_zscore"
 DEFAULT_FOLDS = 5
 DEFAULT_SEED = 42
 
 
 def check_prerequisites() -> None:
-    """Fail fast if splits haven't been created yet."""
+    missing = []
     if not TRAIN_CSV.exists():
-        print("ERROR: train_split.csv not found.")
-        print("Run prepare_splits.py first:\n  python prepare_splits.py")
-        sys.exit(1)
+        missing.append(str(TRAIN_CSV))
     if not TEST_CSV.exists():
-        print("ERROR: test_split.csv not found.")
-        print("Run prepare_splits.py first:\n  python prepare_splits.py")
+        missing.append(str(TEST_CSV))
+    if missing:
+        print("ERROR: The following split files are missing:")
+        for p in missing:
+            print(f"  {p}")
+        print("Run prepare_splits.py first.")
         sys.exit(1)
-    print(f"✓ Found train split: {TRAIN_CSV}")
-    print(f"✓ Found test split:  {TEST_CSV}")
+    print(f"✓ train split: {TRAIN_CSV}")
+    print(f"✓ test split:  {TEST_CSV}")
 
 
-def run_ssl_pretraining(ssl_epochs: int) -> None:
-    """Run self-supervised pretraining if checkpoint doesn't exist."""
-    if SSL_CHECKPOINT.exists():
+def run_ssl_pretraining(ssl_epochs: int, force: bool) -> None:
+    if SSL_CHECKPOINT.exists() and not force:
         print(f"\n✓ SSL checkpoint already exists: {SSL_CHECKPOINT}")
-        print("  Skipping SSL pretraining. Use --force-ssl-pretrain to re-run.")
         return
-
     print(f"\n{'='*60}")
     print("Running self-supervised pretraining (SimCLR)...")
     print(f"{'='*60}")
     t0 = time.time()
-    result = subprocess.run(
+    subprocess.run(
         [sys.executable, str(SSL_SCRIPT), "--epochs", str(ssl_epochs)],
         check=True,
     )
-    elapsed = time.time() - t0
-    print(f"\n✓ SSL pretraining complete ({elapsed/60:.1f} min)")
+    print(f"\n✓ SSL pretraining complete ({(time.time()-t0)/60:.1f} min)")
+
+
+def read_summary_csv(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    with path.open() as f:
+        return list(csv.DictReader(f))
 
 
 def run_finetune(
@@ -103,14 +88,13 @@ def run_finetune(
     metric: str,
     n_folds: int,
     seed: int,
-) -> dict[str, str]:
-    """Run a single fine-tuning condition and return result metadata."""
+) -> dict:
     print(f"\n{'='*60}")
     print(f"Fine-tuning: backbone={backbone}  n_train={n_train}  metric={metric}")
     print(f"{'='*60}")
 
     t0 = time.time()
-    result = subprocess.run(
+    subprocess.run(
         [
             sys.executable, str(FINETUNE_SCRIPT),
             "--backbone", backbone,
@@ -121,68 +105,63 @@ def run_finetune(
         ],
         check=True,
     )
-    elapsed = time.time() - t0
-    print(f"✓ Done ({elapsed/60:.1f} min)")
+    elapsed = round((time.time() - t0) / 60, 2)
+    print(f"✓ Done ({elapsed} min)")
 
-    # Read fold summary and compute mean/std
-    summary_path = OUTPUT_BASE / backbone / f"n{n_train}" / "fold_summary.csv"
-    row = {
+    run_dir = OUTPUT_BASE / backbone / f"n{n_train}"
+    val_rows = read_summary_csv(run_dir / "fold_summary.csv")
+    test_rows = read_summary_csv(run_dir / "test_summary.csv")
+
+    def agg(rows: list[dict], prefix: str) -> dict:
+        if not rows:
+            return {f"{prefix}_{k}_{s}": "" for k in ["mae", "rmse", "r2"] for s in ["mean", "std"]}
+        import numpy as np
+        result = {}
+        for k in ["mae", "rmse", "r2"]:
+            vals = [float(r[k]) for r in rows if r.get(k)]
+            result[f"{prefix}_{k}_mean"] = round(float(np.mean(vals)), 6)
+            result[f"{prefix}_{k}_std"]  = round(float(np.std(vals)),  6)
+        return result
+
+    return {
         "backbone": backbone,
         "n_train": n_train,
         "metric": metric,
-        "elapsed_min": round(elapsed / 60, 2),
-        "mae_mean": "",
-        "mae_std": "",
-        "rmse_mean": "",
-        "rmse_std": "",
-        "r2_mean": "",
-        "r2_std": "",
+        "elapsed_min": elapsed,
+        **agg(val_rows,  "val"),
+        **agg(test_rows, "test"),
     }
 
-    if summary_path.exists():
-        import numpy as np
-        fold_rows = []
-        with summary_path.open() as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                fold_rows.append(r)
-        if fold_rows:
-            for k in ["mae", "rmse", "r2"]:
-                vals = [float(r[k]) for r in fold_rows]
-                row[f"{k}_mean"] = round(float(np.mean(vals)), 6)
-                row[f"{k}_std"] = round(float(np.std(vals)), 6)
 
-    return row
-
-
-def save_results(all_rows: list[dict]) -> None:
-    if not all_rows:
+def save_results(rows: list[dict]) -> None:
+    if not rows:
         return
-    fieldnames = list(all_rows[0].keys())
+    fieldnames = list(rows[0].keys())
     RESULTS_SUMMARY.parent.mkdir(parents=True, exist_ok=True)
     with RESULTS_SUMMARY.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(all_rows)
-    print(f"\n✓ Results summary saved → {RESULTS_SUMMARY}")
+        writer.writerows(rows)
+    print(f"\n✓ Results saved → {RESULTS_SUMMARY}")
 
 
-def print_final_summary(all_rows: list[dict]) -> None:
+def print_summary(rows: list[dict]) -> None:
     print(f"\n{'='*60}")
     print("RESULTS SUMMARY")
     print(f"{'='*60}")
-    print(f"{'Backbone':<15} {'n_train':<10} {'MAE':<20} {'RMSE':<20} {'R²':<20}")
-    print("-" * 85)
-    for row in all_rows:
-        mae_str = f"{row['mae_mean']} ± {row['mae_std']}" if row['mae_mean'] else "N/A"
-        rmse_str = f"{row['rmse_mean']} ± {row['rmse_std']}" if row['rmse_mean'] else "N/A"
-        r2_str = f"{row['r2_mean']} ± {row['r2_std']}" if row['r2_mean'] else "N/A"
-        print(f"{row['backbone']:<15} {str(row['n_train']):<10} {mae_str:<20} {rmse_str:<20} {r2_str:<20}")
+    header = f"{'Backbone':<15} {'n_train':<8} {'Val MAE':<20} {'Test MAE':<20} {'Test R²':<20}"
+    print(header)
+    print("-" * len(header))
+    for r in rows:
+        val_mae  = f"{r.get('val_mae_mean','')} ± {r.get('val_mae_std','')}"
+        test_mae = f"{r.get('test_mae_mean','')} ± {r.get('test_mae_std','')}"
+        test_r2  = f"{r.get('test_r2_mean','')} ± {r.get('test_r2_std','')}"
+        print(f"{r['backbone']:<15} {str(r['n_train']):<8} {val_mae:<20} {test_mae:<20} {test_r2:<20}")
 
 
 def main(
     backbones: list[str],
-    label_sizes: list[int],
+    n_train: int,
     metric: str,
     n_folds: int,
     seed: int,
@@ -191,94 +170,54 @@ def main(
     ssl_epochs: int,
 ) -> None:
     print("Nighttime brightness prediction — experiment runner")
-    print(f"Backbones:    {backbones}")
-    print(f"Label sizes:  {label_sizes}")
-    print(f"Metric:       {metric}")
-    print(f"Folds:        {n_folds}")
+    print(f"Backbones: {backbones}  |  n_train: {n_train}  |  metric: {metric}  |  folds: {n_folds}")
 
     check_prerequisites()
 
-    # Run SSL pretraining if needed
     if "ssl" in backbones:
-        if force_ssl_pretrain or not skip_ssl_pretrain:
-            run_ssl_pretraining(ssl_epochs)
-        else:
-            print(f"\n--skip-ssl-pretrain set. Using existing checkpoint: {SSL_CHECKPOINT}")
+        if skip_ssl_pretrain and not force_ssl_pretrain:
             if not SSL_CHECKPOINT.exists():
-                print("ERROR: SSL checkpoint not found. Remove --skip-ssl-pretrain or run pretrain_selfsupervised.py")
+                print("ERROR: --skip-ssl-pretrain set but SSL checkpoint not found.")
                 sys.exit(1)
+            print(f"\n✓ Skipping SSL pretraining, using: {SSL_CHECKPOINT}")
+        else:
+            run_ssl_pretraining(ssl_epochs, force=force_ssl_pretrain)
 
-    # Run all conditions
     all_rows = []
-    total = len(backbones) * len(label_sizes)
-    current = 0
+    for i, backbone in enumerate(backbones):
+        print(f"\n[{i+1}/{len(backbones)}] backbone={backbone}")
+        try:
+            row = run_finetune(backbone, n_train, metric, n_folds, seed)
+            all_rows.append(row)
+            save_results(all_rows)  # save incrementally
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: run failed for backbone={backbone}: {e}")
+            all_rows.append({
+                "backbone": backbone, "n_train": n_train,
+                "metric": metric, "status": "FAILED",
+            })
 
-    for backbone in backbones:
-        for n_train in label_sizes:
-            current += 1
-            print(f"\n[{current}/{total}] backbone={backbone}  n_train={n_train}")
-            try:
-                row = run_finetune(backbone, n_train, metric, n_folds, seed)
-                all_rows.append(row)
-                # Save incrementally so partial runs aren't lost
-                save_results(all_rows)
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: run failed for backbone={backbone} n_train={n_train}: {e}")
-                all_rows.append({
-                    "backbone": backbone,
-                    "n_train": n_train,
-                    "metric": metric,
-                    "status": "FAILED",
-                })
-
-    print_final_summary(all_rows)
+    print_summary(all_rows)
     save_results(all_rows)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run all brightness prediction experiments.")
+    parser.add_argument("--backbones", nargs="+", default=ALL_BACKBONES, choices=ALL_BACKBONES)
+    parser.add_argument("--n-train", type=int, default=DEFAULT_N_TRAIN)
     parser.add_argument(
-        "--backbones",
-        nargs="+",
-        default=ALL_BACKBONES,
-        choices=ALL_BACKBONES,
-        help="Which backbone conditions to run.",
-    )
-    parser.add_argument(
-        "--label-sizes",
-        nargs="+",
-        type=int,
-        default=DEFAULT_LABEL_SIZES,
-        help="Training set sizes to sweep over.",
-    )
-    parser.add_argument(
-        "--metric",
-        default=DEFAULT_METRIC,
+        "--metric", default=DEFAULT_METRIC,
         choices=[
             "gray_mean", "gray_median", "gray_trimmed_mean", "gray_p90",
             "luma_mean", "value_mean", "gray_mean_over_std",
             "gray_mean_zscore", "gray_mean_robust_zscore",
         ],
-        help="Brightness metric to regress.",
     )
     parser.add_argument("--folds", type=int, default=DEFAULT_FOLDS)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    parser.add_argument(
-        "--skip-ssl-pretrain",
-        action="store_true",
-        help="Skip SSL pretraining and use existing checkpoint.",
-    )
-    parser.add_argument(
-        "--force-ssl-pretrain",
-        action="store_true",
-        help="Re-run SSL pretraining even if checkpoint exists.",
-    )
-    parser.add_argument(
-        "--ssl-epochs",
-        type=int,
-        default=100,
-        help="Number of epochs for SSL pretraining.",
-    )
+    parser.add_argument("--skip-ssl-pretrain", action="store_true")
+    parser.add_argument("--force-ssl-pretrain", action="store_true")
+    parser.add_argument("--ssl-epochs", type=int, default=100)
     return parser.parse_args()
 
 
@@ -286,7 +225,7 @@ if __name__ == "__main__":
     args = parse_args()
     main(
         backbones=args.backbones,
-        label_sizes=args.label_sizes,
+        n_train=args.n_train,
         metric=args.metric,
         n_folds=args.folds,
         seed=args.seed,

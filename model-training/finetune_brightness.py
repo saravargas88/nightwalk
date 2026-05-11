@@ -7,18 +7,23 @@ from daytime images, using one of three backbone initializations:
   --backbone dino_counts    Weights from train_efficientnet_multihead.pt (Script 1)
   --backbone ssl            Weights from pretrain_selfsupervised.py (Script 3)
 
-Supports a label-size sweep (--n-train) to study how many paired
-examples are needed.
+After all folds finish, evaluates the best checkpoint from each fold on the
+held-out test split and saves test_predictions.csv + test_metrics.csv.
 
-Outputs (under model-training/finetune-runs/<backbone>/<n_train>/fold_<k>/):
-  best_model.pt
-  training_log.csv
-  val_predictions_epoch_*.csv
+Outputs (under model-training/finetune-runs/<backbone>/n<n_train>/):
+  fold_<k>/
+    best_model.pt
+    training_log.csv
+    val_predictions_epoch_*.csv
+    test_predictions.csv    ← test split predictions for this fold's best model
+    test_metrics.csv        ← test split metrics for this fold's best model
+  fold_summary.csv          ← val metrics aggregated across folds
+  test_summary.csv          ← test metrics aggregated across folds
 
 Usage:
-    python finetune_brightness.py --backbone imagenet --n-train 800
-    python finetune_brightness.py --backbone dino_counts --n-train 200 --metric gray_mean_zscore
-    python finetune_brightness.py --backbone ssl --n-train 100 --folds 5
+    python finetune_brightness.py --backbone imagenet
+    python finetune_brightness.py --backbone dino_counts --metric gray_mean_zscore
+    python finetune_brightness.py --backbone ssl --folds 5
 """
 
 from __future__ import annotations
@@ -28,7 +33,6 @@ import csv
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -45,12 +49,16 @@ from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
 TRAIN_CSV = ROOT / "splits" / "train_split.csv"
-BRIGHTNESS_CSV = ROOT / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
+TEST_CSV = ROOT / "splits" / "test_split.csv"
+BRIGHTNESS_CSV = (
+    ROOT / "brightnessmetricexperiments"
+    / "experiment_outputs"
+    / "paired_dataset_with_brightness.csv"
+)
 DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"
 
 DINO_CHECKPOINT = ROOT / "model-training" / "best_efficientnet_multihead.pt"
 SSL_CHECKPOINT = ROOT / "model-training" / "ssl-pretrain" / "best_ssl_backbone.pt"
-
 OUTPUT_BASE = ROOT / "model-training" / "finetune-runs"
 
 # ── Hyperparameters ───────────────────────────────────────────────────────────
@@ -76,8 +84,6 @@ AVAILABLE_METRICS = [
     "gray_mean_robust_zscore",
 ]
 DEFAULT_METRIC = "gray_mean_zscore"
-
-LABEL_SIZE_OPTIONS = [50, 100, 200, 400, 800]
 DEFAULT_N_TRAIN = 800
 DEFAULT_FOLDS = 5
 
@@ -126,16 +132,16 @@ val_tf = transforms.Compose([
 ])
 
 
-def load_examples(metric: str) -> list[Example]:
-    """Join train_split.csv with brightness CSV on night_photo / day_image."""
-    train_df = pd.read_csv(TRAIN_CSV)
+def _load_examples_from_split(split_csv: Path, metric: str) -> list[Example]:
+    """Join a split CSV with the brightness CSV and return valid Examples."""
+    split_df = pd.read_csv(split_csv)
     brightness_df = pd.read_csv(BRIGHTNESS_CSV)
 
-    # Keep only valid pairs
-    train_df = train_df[train_df["day_image"].notna() & (train_df["day_image"].str.strip() != "")]
+    split_df = split_df[
+        split_df["day_image"].notna() & (split_df["day_image"].str.strip() != "")
+    ]
 
-    # Merge brightness values in
-    merged = train_df.merge(
+    merged = split_df.merge(
         brightness_df[["night_photo", "day_image", metric]],
         on=["night_photo", "day_image"],
         how="inner",
@@ -154,21 +160,31 @@ def load_examples(metric: str) -> list[Example]:
                 target=float(row[metric]),
             )
         )
-    print(f"Loaded {len(examples)} valid examples with brightness metric '{metric}'")
     return examples
 
 
-def sample_n_train(
-    examples: list[Example],
-    n_train: int,
-    seed: int,
-) -> list[Example]:
-    """Sample n_train examples, grouped by day_image for consistency."""
+def load_train_examples(metric: str) -> list[Example]:
+    examples = _load_examples_from_split(TRAIN_CSV, metric)
+    print(f"Loaded {len(examples)} train examples with metric '{metric}'")
+    return examples
+
+
+def load_test_examples(metric: str) -> list[Example]:
+    if not TEST_CSV.exists():
+        raise FileNotFoundError(
+            f"Test split not found: {TEST_CSV}\n"
+            "Run prepare_splits.py first."
+        )
+    examples = _load_examples_from_split(TEST_CSV, metric)
+    print(f"Loaded {len(examples)} test examples with metric '{metric}'")
+    return examples
+
+
+def sample_n_train(examples: list[Example], n_train: int, seed: int) -> list[Example]:
     rng = random.Random(seed)
     if n_train >= len(examples):
         return examples
-    sampled = rng.sample(examples, n_train)
-    return sampled
+    return rng.sample(examples, n_train)
 
 
 def make_kfold_splits(
@@ -176,21 +192,16 @@ def make_kfold_splits(
     n_folds: int,
     seed: int,
 ) -> list[tuple[list[Example], list[Example]]]:
-    """
-    K-fold split grouped by day_image so the same scene
-    never appears in both train and val within a fold.
-    """
+    """K-fold split grouped by day_image to prevent scene leakage."""
     rng = random.Random(seed)
-
-    # Group by day_image
     groups: dict[str, list[Example]] = {}
     for ex in examples:
         groups.setdefault(ex.day_image, []).append(ex)
 
     day_images = list(groups.keys())
     rng.shuffle(day_images)
-
     fold_size = len(day_images) // n_folds
+
     folds = []
     for k in range(n_folds):
         val_days = set(day_images[k * fold_size: (k + 1) * fold_size])
@@ -224,28 +235,24 @@ class EfficientNetRegressor(nn.Module):
 # ── Backbone loading ──────────────────────────────────────────────────────────
 def load_backbone(model: EfficientNetRegressor, backbone: str) -> None:
     if backbone == "imagenet":
-        print("Using pure ImageNet backbone (no additional pretraining)")
+        print("  Using pure ImageNet backbone (no additional pretraining)")
         return
 
     if backbone == "dino_counts":
         if not DINO_CHECKPOINT.exists():
             raise FileNotFoundError(f"DINO counts checkpoint not found: {DINO_CHECKPOINT}")
         state = torch.load(DINO_CHECKPOINT, map_location="cpu")
-        # Script 1 saves raw state_dict with keys like backbone.* or features.*
         remapped = {}
         for key, value in state.items():
             if key.startswith("backbone."):
-                new_key = "features." + key[len("backbone."):]
-                remapped[new_key] = value
+                remapped["features." + key[len("backbone."):]] = value
             elif key.startswith("features."):
                 remapped[key] = value
         missing, unexpected = model.load_state_dict(remapped, strict=False)
-        # Expect only head keys to be missing
         backbone_missing = [k for k in missing if not k.startswith("head.")]
         if backbone_missing:
             print(f"  WARNING: {len(backbone_missing)} backbone keys missing: {backbone_missing[:5]}")
-        print(f"  Loaded DINO counts backbone from {DINO_CHECKPOINT.name}")
-        print(f"  Missing: {len(missing)}  Unexpected: {len(unexpected)}")
+        print(f"  Loaded DINO counts backbone — missing={len(missing)} unexpected={len(unexpected)}")
         return
 
     if backbone == "ssl":
@@ -255,9 +262,8 @@ def load_backbone(model: EfficientNetRegressor, backbone: str) -> None:
                 "Run pretrain_selfsupervised.py first."
             )
         state = torch.load(SSL_CHECKPOINT, map_location="cpu")
-        # SSL checkpoint saves {"features": ..., "avgpool": ...}
-        missing_f, unexpected_f = model.features.load_state_dict(state["features"], strict=True)
-        missing_p, unexpected_p = model.avgpool.load_state_dict(state["avgpool"], strict=True)
+        model.features.load_state_dict(state["features"], strict=True)
+        model.avgpool.load_state_dict(state["avgpool"], strict=True)
         print(f"  Loaded SSL backbone from {SSL_CHECKPOINT.name}")
         return
 
@@ -268,7 +274,6 @@ def load_backbone(model: EfficientNetRegressor, backbone: str) -> None:
 def compute_metrics(preds: torch.Tensor, targets: torch.Tensor) -> dict[str, float]:
     mae = float((preds - targets).abs().mean().item())
     rmse = float(((preds - targets) ** 2).mean().sqrt().item())
-    # R² 
     ss_res = float(((targets - preds) ** 2).sum().item())
     ss_tot = float(((targets - targets.mean()) ** 2).sum().item())
     r2 = 1.0 - ss_res / max(ss_tot, 1e-8)
@@ -279,14 +284,15 @@ def compute_metrics(preds: torch.Tensor, targets: torch.Tensor) -> dict[str, flo
 def save_predictions(
     examples: list[Example],
     preds: torch.Tensor,
-    epoch: int,
-    output_dir: Path,
+    output_path: Path,
 ) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / f"val_predictions_epoch_{epoch:03d}.csv"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     preds_np = preds.cpu().numpy()
-    with out_path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["night_photo", "day_image", "true_target", "pred_target"])
+    with output_path.open("w", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["night_photo", "day_image", "true_target", "pred_target"],
+        )
         writer.writeheader()
         for ex, pred in zip(examples, preds_np):
             writer.writerow({
@@ -295,6 +301,59 @@ def save_predictions(
                 "true_target": round(ex.target, 6),
                 "pred_target": round(float(pred), 6),
             })
+
+
+# ── Test evaluation ───────────────────────────────────────────────────────────
+def evaluate_on_test(
+    test_examples: list[Example],
+    checkpoint_path: Path,
+    output_dir: Path,
+    backbone: str,
+    metric: str,
+) -> dict[str, float]:
+    """Load the best checkpoint for a fold and evaluate on the test split."""
+    model = EfficientNetRegressor().to(DEVICE)
+    ckpt = torch.load(checkpoint_path, map_location=DEVICE)
+    model.load_state_dict(ckpt["model_state_dict"])
+    model.eval()
+
+    test_ds = BrightnessDataset(test_examples, val_tf)
+    test_dl = DataLoader(
+        test_ds, batch_size=BATCH_SIZE, shuffle=False,
+        num_workers=NUM_WORKERS, pin_memory=(DEVICE != "cpu"),
+    )
+
+    all_preds, all_targets = [], []
+    with torch.no_grad():
+        for images, targets in test_dl:
+            images, targets = images.to(DEVICE), targets.to(DEVICE)
+            preds = model(images)
+            all_preds.append(preds.cpu())
+            all_targets.append(targets.cpu())
+
+    all_preds_t = torch.cat(all_preds)
+    all_targets_t = torch.cat(all_targets)
+    metrics = compute_metrics(all_preds_t, all_targets_t)
+
+    # Save predictions
+    save_predictions(
+        test_examples,
+        all_preds_t,
+        output_dir / "test_predictions.csv",
+    )
+
+    # Save metrics
+    metrics_path = output_dir / "test_metrics.csv"
+    with metrics_path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["backbone", "metric", "mae", "rmse", "r2"])
+        writer.writeheader()
+        writer.writerow({
+            "backbone": backbone,
+            "metric": metric,
+            **{k: round(v, 6) for k, v in metrics.items()},
+        })
+
+    return metrics
 
 
 # ── Single fold training ──────────────────────────────────────────────────────
@@ -330,7 +389,8 @@ def train_fold(
     scheduler = CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS)
 
     best_val_loss = float("inf")
-    best_metrics: dict[str, float] = {}
+    best_val_metrics: dict[str, float] = {}
+    checkpoint_path = output_dir / "best_model.pt"
 
     log_path = output_dir / "training_log.csv"
     with log_path.open("w", newline="") as log_handle:
@@ -387,7 +447,7 @@ def train_fold(
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                best_metrics = metrics
+                best_val_metrics = metrics
                 torch.save(
                     {
                         "model_state_dict": model.state_dict(),
@@ -395,13 +455,17 @@ def train_fold(
                         "metric": metric,
                         "image_size": IMG_SIZE,
                     },
-                    output_dir / "best_model.pt",
+                    checkpoint_path,
                 )
 
             if epoch % SAVE_PRED_EVERY == 0:
-                save_predictions(val_examples, all_preds_t, epoch, output_dir)
+                save_predictions(
+                    val_examples,
+                    all_preds_t,
+                    output_dir / f"val_predictions_epoch_{epoch:03d}.csv",
+                )
 
-    return best_metrics
+    return best_val_metrics, checkpoint_path
 
 
 # ── Main training entry ───────────────────────────────────────────────────────
@@ -411,43 +475,73 @@ def train(
     metric: str,
     n_folds: int,
     seed: int,
-) -> None:
+) -> tuple[dict, dict, dict, dict]:
     print(f"\n{'='*60}")
     print(f"Backbone: {backbone}  |  n_train: {n_train}  |  metric: {metric}  |  folds: {n_folds}")
     print(f"{'='*60}")
 
-    all_examples = load_examples(metric)
-    sampled = sample_n_train(all_examples, n_train, seed)
-    print(f"Using {len(sampled)} examples for this run")
+    train_examples = load_train_examples(metric)
+    test_examples = load_test_examples(metric)
+
+    sampled = sample_n_train(train_examples, n_train, seed)
+    print(f"Using {len(sampled)} training examples for this run")
 
     folds = make_kfold_splits(sampled, n_folds, seed)
-
-    fold_metrics = []
     run_dir = OUTPUT_BASE / backbone / f"n{n_train}"
+
+    fold_val_metrics = []
+    fold_test_metrics = []
 
     for fold_idx, (train_exs, val_exs) in enumerate(folds):
         fold_dir = run_dir / f"fold_{fold_idx}"
         print(f"\n── Fold {fold_idx + 1}/{n_folds}  (train={len(train_exs)}, val={len(val_exs)}) ──")
-        metrics = train_fold(train_exs, val_exs, backbone, fold_dir, metric)
-        fold_metrics.append(metrics)
-        print(f"  Best → mae={metrics['mae']:.4f}  rmse={metrics['rmse']:.4f}  r2={metrics['r2']:.4f}")
 
-    # Aggregate across folds
-    summary_path = run_dir / "fold_summary.csv"
-    with summary_path.open("w", newline="") as f:
+        val_metrics, checkpoint_path = train_fold(
+            train_exs, val_exs, backbone, fold_dir, metric
+        )
+        fold_val_metrics.append(val_metrics)
+        print(f"  Val best  → mae={val_metrics['mae']:.4f}  rmse={val_metrics['rmse']:.4f}  r2={val_metrics['r2']:.4f}")
+
+        # Evaluate best checkpoint from this fold on the test split
+        print(f"  Evaluating fold {fold_idx} best model on test split...")
+        test_metrics = evaluate_on_test(
+            test_examples, checkpoint_path, fold_dir, backbone, metric
+        )
+        fold_test_metrics.append(test_metrics)
+        print(f"  Test      → mae={test_metrics['mae']:.4f}  rmse={test_metrics['rmse']:.4f}  r2={test_metrics['r2']:.4f}")
+
+    # ── Aggregate val metrics across folds ────────────────────────────────────
+    val_summary_path = run_dir / "fold_summary.csv"
+    with val_summary_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["fold", "mae", "rmse", "r2"])
         writer.writeheader()
-        for i, m in enumerate(fold_metrics):
+        for i, m in enumerate(fold_val_metrics):
             writer.writerow({"fold": i, **{k: round(v, 6) for k, v in m.items()}})
 
-    mean_metrics = {k: np.mean([m[k] for m in fold_metrics]) for k in ["mae", "rmse", "r2"]}
-    std_metrics = {k: np.std([m[k] for m in fold_metrics]) for k in ["mae", "rmse", "r2"]}
+    # ── Aggregate test metrics across folds ───────────────────────────────────
+    test_summary_path = run_dir / "test_summary.csv"
+    with test_summary_path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["fold", "mae", "rmse", "r2"])
+        writer.writeheader()
+        for i, m in enumerate(fold_test_metrics):
+            writer.writerow({"fold": i, **{k: round(v, 6) for k, v in m.items()}})
 
-    print(f"\n── {n_folds}-fold summary ──")
-    for k in ["mae", "rmse", "r2"]:
-        print(f"  {k}: {mean_metrics[k]:.4f} ± {std_metrics[k]:.4f}")
+    val_mean = {k: float(np.mean([m[k] for m in fold_val_metrics])) for k in ["mae", "rmse", "r2"]}
+    val_std  = {k: float(np.std( [m[k] for m in fold_val_metrics])) for k in ["mae", "rmse", "r2"]}
+    test_mean = {k: float(np.mean([m[k] for m in fold_test_metrics])) for k in ["mae", "rmse", "r2"]}
+    test_std  = {k: float(np.std( [m[k] for m in fold_test_metrics])) for k in ["mae", "rmse", "r2"]}
 
-    return mean_metrics, std_metrics
+    print(f"\n── {n_folds}-fold summary ──────────────────────────────")
+    print(f"  {'':8}  {'MAE':>20}  {'RMSE':>20}  {'R²':>20}")
+    for split, mean, std in [("Val", val_mean, val_std), ("Test", test_mean, test_std)]:
+        print(
+            f"  {split:8}  "
+            f"{mean['mae']:.4f} ± {std['mae']:.4f}  "
+            f"{mean['rmse']:.4f} ± {std['rmse']:.4f}  "
+            f"{mean['r2']:.4f} ± {std['r2']:.4f}"
+        )
+
+    return val_mean, val_std, test_mean, test_std
 
 
 # ── Arg parsing ───────────────────────────────────────────────────────────────
@@ -457,26 +551,10 @@ def parse_args() -> argparse.Namespace:
         "--backbone",
         choices=["imagenet", "dino_counts", "ssl"],
         default="dino_counts",
-        help="Which backbone initialization to use.",
     )
-    parser.add_argument(
-        "--n-train",
-        type=int,
-        default=DEFAULT_N_TRAIN,
-        help="Number of training examples to use (label size sweep).",
-    )
-    parser.add_argument(
-        "--metric",
-        default=DEFAULT_METRIC,
-        choices=AVAILABLE_METRICS,
-        help="Brightness metric to regress.",
-    )
-    parser.add_argument(
-        "--folds",
-        type=int,
-        default=DEFAULT_FOLDS,
-        help="Number of cross-validation folds.",
-    )
+    parser.add_argument("--n-train", type=int, default=DEFAULT_N_TRAIN)
+    parser.add_argument("--metric", default=DEFAULT_METRIC, choices=AVAILABLE_METRICS)
+    parser.add_argument("--folds", type=int, default=DEFAULT_FOLDS)
     parser.add_argument("--seed", type=int, default=RANDOM_SEED)
     return parser.parse_args()
 
