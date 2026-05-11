@@ -25,6 +25,10 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchvision import transforms
 from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
+import pandas as pd
+from torch.utils.data import Dataset as TorchDataset
+
+
 try:
     import lightly
     from lightly.data import LightlyDataset
@@ -112,8 +116,30 @@ def train(epochs: int, batch_size: int, lr: float, weight_decay: float, img_size
     transform = make_simclr_transform(img_size)
 
     # LightlyDataset handles producing two augmented views per image automatically
-    dataset = LightlyDataset(input_dir=str(IMAGE_DIR), transform=transform)
-    print(f"Found {len(dataset)} images in {IMAGE_DIR}")
+    train_csv = ROOT / "splits" / "efficientnet_train_images.csv"
+    train_df = pd.read_csv(train_csv)
+    valid_paths = [
+        IMAGE_DIR / row["image"]
+        for _, row in train_df.iterrows()
+        if (IMAGE_DIR / row["image"]).exists()
+    ]
+    print(f"Found {len(valid_paths)} valid images from efficientnet_train_images.csv")
+
+    class PathListDataset(TorchDataset):
+        def __init__(self, paths, transform):
+            self.paths = paths
+            self.transform = transform
+
+        def __len__(self):
+            return len(self.paths)
+
+        def __getitem__(self, idx):
+            img = Image.open(self.paths[idx]).convert("RGB")
+            # return two views like lightly expects
+            return [self.transform(img), self.transform(img)], 0, str(self.paths[idx])
+
+    dataset = PathListDataset(valid_paths, transform)
+
 
     dataloader = torch.utils.data.DataLoader(
         dataset,
@@ -142,8 +168,7 @@ def train(epochs: int, batch_size: int, lr: float, weight_decay: float, img_size
             n_batches = 0
 
             for batch in dataloader:
-                # lightly returns (views, targets, filenames); views is a list of 2 tensors
-                views = batch[0]
+                views, _, _ = batch
                 x0, x1 = views[0].to(DEVICE), views[1].to(DEVICE)
 
                 optimizer.zero_grad()
