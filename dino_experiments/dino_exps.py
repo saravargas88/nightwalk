@@ -13,6 +13,7 @@ Modes:
 Set MODE below to switch between them.
 """
 import csv
+from importlib.resources import path
 import re
 import json
 import yaml
@@ -42,9 +43,12 @@ THRESHOLDS = [
     {"name": "low",    "box": 0.20, "text": 0.15},
 ]
 
+# Loading data from the pairs file
+day_df = pd.read_csv("../splits/efficientnet_train_images.csv")
+
 # Count mode settings
 COUNT_PROMPT_NAME = "informed_prompt_3"  # must match a name in prompts.yaml
-SAMPLES           = 109
+SAMPLES           = len(day_df)
 THRESHOLD         = 0.30
 TEXT_THRESHOLD    = 0.25
 COUNTS_DIR        = Path("dino_counts")
@@ -81,15 +85,9 @@ PROMPT_MAP = {p["name"]: p for p in PROMPTS}
 # df["hour"] = pd.to_datetime(df["timestamp"], unit="s", utc=True).dt.tz_convert("America/New_York").dt.hour
 # day_df = df[df["hour"] < 19].reset_index(drop=True)
 
-# Loading data from the pairs file
-pairs = pd.read_csv("../model_training/paired_fixed.csv")
-day_df = pairs[["day_image"]].rename(columns={"day_image": "image"})
-day_df["taken_on"] = ""
-day_df["period"] = ""
-
 # ── Load model ────────────────────────────────────────────────────────────────
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 processor = AutoProcessor.from_pretrained(MODEL_ID)
 model = AutoModelForZeroShotObjectDetection.from_pretrained(MODEL_ID).to(device)
 print(f"Model loaded: {MODEL_ID} on {device}")
@@ -208,9 +206,9 @@ elif MODE == "count":
         raise ValueError(f"Prompt '{COUNT_PROMPT_NAME}' not found in prompts.yaml")
 
     prompt      = PROMPT_MAP[COUNT_PROMPT_NAME]
-    RUN_NAME    = COUNT_PROMPT_NAME
-    OUTPUT_CSV  = COUNTS_DIR / f"dino_counts_{RUN_NAME}-pairs.csv"
-    OUTPUT_JSON = COUNTS_DIR / f"dino_counts_{RUN_NAME}-pairs.json"
+    RUN_NAME    = "efficientnet_train_images"
+    OUTPUT_CSV  = COUNTS_DIR / f"dino_{RUN_NAME}.csv"
+    OUTPUT_JSON = COUNTS_DIR / f"dino_{RUN_NAME}.json"
 
     print(f"Prompt:     {COUNT_PROMPT_NAME}")
     print(f"Text:       {prompt['text']}")
