@@ -1,6 +1,0 @@
-mv dino_counts/dino_finetune_pairs.csv brightnessmetricexperiments/dino-counts-trainset.csv
-mv dino_counts/dino_finetune_pairs.json brightnessmetricexperiments/brounding-boxes-trainset.json
-
-python brightnessmetricexperiments/brightness_experiments.py
-
-python run_experiments.py

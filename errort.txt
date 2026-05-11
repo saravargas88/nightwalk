@@ -1,0 +1,56 @@
+Running self-supervised pretraining (SimCLR)...
+============================================================
+Using device: cuda
+Found 201134 images in /home/bia/NightWalk/urban-mosaic/washington-square
+Traceback (most recent call last):
+  File "/home/bia/NightWalk/model-training/pretrain_selfsupervised.py", line 190, in <module>
+    train(
+  File "/home/bia/NightWalk/model-training/pretrain_selfsupervised.py", line 144, in train
+    for batch in dataloader:
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 741, in __next__
+    data = self._next_data()
+           ^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1548, in _next_data
+    return self._process_data(data, worker_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1586, in _process_data
+    data.reraise()
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/_utils.py", line 785, in reraise
+    raise exception
+PIL.UnidentifiedImageError: Caught UnidentifiedImageError in DataLoader worker process 0.
+Original Traceback (most recent call last):
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/_utils/worker.py", line 358, in _worker_loop
+    data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/_utils/fetch.py", line 54, in fetch
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torch/utils/data/_utils/fetch.py", line 54, in <listcomp>
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+            ~~~~~~~~~~~~^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/lightly/data/dataset.py", line 165, in __getitem__
+    sample, target = self.dataset.__getitem__(index)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torchvision/datasets/folder.py", line 245, in __getitem__
+    sample = self.loader(path)
+             ^^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torchvision/datasets/folder.py", line 284, in default_loader
+    return pil_loader(path)
+           ^^^^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/torchvision/datasets/folder.py", line 263, in pil_loader
+    img = Image.open(f)
+          ^^^^^^^^^^^^^
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/site-packages/PIL/Image.py", line 3711, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BufferedReader name='/home/bia/NightWalk/urban-mosaic/washington-square/0/20160629/bd209a4b83760d6b/cds-bd209a4b83760d6b-20160629-0933.raw/4/._dr5rsn1pvncd-dr5rsn304yy8-cds-bd209a4b83760d6b-20160629-0933-32.jpg'>
+
+Traceback (most recent call last):
+  File "/home/bia/NightWalk/model-training/run_experiments.py", line 226, in <module>
+    main(
+  File "/home/bia/NightWalk/model-training/run_experiments.py", line 184, in main
+    run_ssl_pretraining(ssl_epochs, force=force_ssl_pretrain)
+  File "/home/bia/NightWalk/model-training/run_experiments.py", line 71, in run_ssl_pretraining
+    subprocess.run(
+  File "/home/bia/miniconda3/envs/nw/lib/python3.11/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/home/bia/miniconda3/envs/nw/bin/python', '/home/bia/NightWalk/model-training/pretrain_selfsupervised.py', '--epochs', '100']' returned non-zero exit status 1.

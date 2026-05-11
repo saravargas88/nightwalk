@@ -46,14 +46,11 @@ THRESHOLDS = [
 # Load valid pairs from all-matches.csv
 # - skipped == False means a day match was found
 # - drop_duplicates on day_image so DINO processes each day image only once
-_matches_df = pd.read_csv("../splits/all-matches.csv")
+_matches_df = pd.read_csv("../all-matches.csv")
 day_df = (
     _matches_df[
-        (_matches_df["skipped"] == False) &
-        (_matches_df["day_image"].notna()) &
-        (_matches_df["day_image"].str.strip() != "")
+        (_matches_df["skipped"] == "False") 
     ]
-    .drop_duplicates(subset=["day_image"]) # type: ignore
     .rename(columns={"day_image": "image"})
     .reset_index(drop=True)
 )
