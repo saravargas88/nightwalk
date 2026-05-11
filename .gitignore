@@ -1,6 +1,7 @@
 /urban-mosaic
 /evening_images
 *.jpg
+*.JPG
 *.png
 *.csv
 *.jpeg

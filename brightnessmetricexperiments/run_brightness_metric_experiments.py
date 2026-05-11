@@ -26,7 +26,7 @@ from PIL import Image
 
 
 BASE_DIR = Path(__file__).resolve().parent
-MATCHES_CSV = BASE_DIR / "all-matches.csv"
+MATCHES_CSV = Path(__file__).resolve().parent.parent / "splits" /"all-matches.csv"
 COUNTS_CSV = BASE_DIR / "dino-counts-trainset.csv"
 BBOX_JSON = BASE_DIR / "brounding-boxes-trainset.json"
 IMAGE_ROOT = BASE_DIR / "extracted_night_images" / "images"
