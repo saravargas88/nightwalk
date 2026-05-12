@@ -56,7 +56,7 @@ BRIGHTNESS_CSV = (
     / "experiment_outputs"
     / "paired_dataset_with_brightness.csv"
 )
-DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"
+DAY_IMAGE_ROOT = ROOT / "brightnessmetricexperiments" / "nightwalk-images-224"
 
 DINO_CHECKPOINT = ROOT / "model-training" / "best_efficientnet_multihead.pt"
 SSL_CHECKPOINT = ROOT / "model-training" / "ssl-pretrain" / "best_ssl_backbone.pt"
@@ -137,6 +137,18 @@ val_tf = transforms.Compose([
 ])
 
 
+def _load_filename_map(image_dir: Path) -> dict[str, str]:
+    """Load original_day_image -> resized_filename map if present."""
+    map_path = image_dir / "filename_map.csv"
+    if not map_path.exists():
+        return {}
+    remap: dict[str, str] = {}
+    with map_path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            remap[row["original_day_image"]] = row["resized_filename"]
+    return remap
+
+
 def _load_examples_from_split(split_csv: Path, metric: str) -> list[Example]:
     """Join a split CSV with the brightness CSV and return valid Examples."""
     split_df = pd.read_csv(split_csv)
@@ -152,15 +164,19 @@ def _load_examples_from_split(split_csv: Path, metric: str) -> list[Example]:
         how="inner",
     )
 
+    name_map = _load_filename_map(DAY_IMAGE_ROOT)
+
     examples = []
     for _, row in merged.iterrows():
-        day_path = DAY_IMAGE_ROOT / row["day_image"]
+        original = row["day_image"]
+        flat = name_map.get(original, original)
+        day_path = DAY_IMAGE_ROOT / flat
         if not day_path.exists():
             continue
         examples.append(
             Example(
                 image_path=str(day_path),
-                day_image=row["day_image"],
+                day_image=original,
                 night_photo=row["night_photo"],
                 target=float(row[metric]),
             )
