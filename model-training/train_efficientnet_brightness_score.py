@@ -34,6 +34,8 @@ import argparse
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_CSV = ROOT / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
+TRAIN_CSV = ROOT / "splits" / "train_split.csv"
+TEST_CSV = ROOT / "splits" / "test_split.csv"
 DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"
 CHECKPOINT_PATH = ROOT / "model-training" / "best_efficientnet_multihead.pt"
 OUTPUT_DIR = ROOT / "model-training" / "brightness-regression-run"
@@ -133,27 +135,34 @@ def load_name_map(image_dir: Path) -> dict:
     return remap
 
 
-def load_examples(image_dir: Path) -> list[Example]:
+def load_examples(image_dir: Path, split_csv: Path) -> list[Example]:
     name_map = load_name_map(image_dir)
-    with DATA_CSV.open(newline="") as handle:
-        rows = list(csv.DictReader(handle))
+
+    split_df_rows = list(csv.DictReader(split_csv.open(newline="")))
+    allowed = {(r["night_photo"], r["day_image"]) for r in split_df_rows}
+
+    brightness = {
+        (r["night_photo"], r["day_image"]): r
+        for r in csv.DictReader(DATA_CSV.open(newline=""))
+    }
 
     examples: list[Example] = []
-    for row in rows:
-        rel = row[IMAGE_COL]
+    for key in allowed:
+        b = brightness.get(key)
+        if b is None:
+            continue
+        rel = b[IMAGE_COL]
         flat = name_map.get(rel)
         day_path = image_dir / flat if flat else image_dir / rel
         if not day_path.exists():
             continue
-        targets = [float(row[target]) for target in TARGETS]
-        examples.append(
-            Example(
-                image_path=str(day_path),
-                targets=targets,
-                night_photo=row["night_photo"],
-                day_image=row[IMAGE_COL],
-            )
-        )
+        targets = [float(b[target]) for target in TARGETS]
+        examples.append(Example(
+            image_path=str(day_path),
+            targets=targets,
+            night_photo=b["night_photo"],
+            day_image=rel,
+        ))
     return examples
 
 
@@ -270,7 +279,7 @@ def save_predictions(
 
 
 def train(image_dir: Path) -> None:
-    examples = load_examples(image_dir)
+    examples = load_examples(image_dir, TRAIN_CSV)
     train_raw, val_raw = split_examples(examples)
     print(f"Loaded examples: {len(examples)}")
     print(f"Train: {len(train_raw)}  Val: {len(val_raw)}")
