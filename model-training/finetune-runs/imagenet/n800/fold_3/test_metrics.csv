@@ -1,2 +1,2 @@
 backbone,metric,mae,rmse,r2
-imagenet,gray_mean_zscore,0.476998,0.619187,0.485096
+imagenet,gray_mean_zscore,0.475976,0.623529,0.477848

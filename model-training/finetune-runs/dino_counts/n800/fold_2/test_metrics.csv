@@ -1,2 +1,2 @@
 backbone,metric,mae,rmse,r2
-dino_counts,gray_mean_zscore,0.533694,0.700187,0.341569
+dino_counts,gray_mean_zscore,0.529597,0.696652,0.348199
