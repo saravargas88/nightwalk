@@ -46,15 +46,16 @@ THRESHOLDS = [
 # Load valid pairs from all-matches.csv
 # - skipped == False means a day match was found
 # - drop_duplicates on day_image so DINO processes each day image only once
-_matches_df = pd.read_csv("../all-matches.csv")
-day_df = (
-    _matches_df[
-        (_matches_df["skipped"] == "False") 
-    ]
-    .rename(columns={"day_image": "image"})
-    .reset_index(drop=True)
-)
-print(f"Valid day images to process: {len(day_df)}")
+_matches_df = pd.read_csv("../splits/efficientnet_train_images.csv")
+day_df = _matches_df
+# day_df = (
+#     _matches_df[
+#         (_matches_df["skipped"] == "False") 
+#     ]
+#     .rename(columns={"day_image": "image"})
+#     .reset_index(drop=True)
+# )
+# print(f"Valid day images to process: {len(day_df)}")
 
 # Count mode settings
 COUNT_PROMPT_NAME = "informed_prompt_3"  # must match a name in prompts.yaml
