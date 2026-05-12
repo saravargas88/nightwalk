@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """linear_probe.py
 
 Extracts frozen EfficientNet-B0 embeddings (1280-dim) from daytime images
@@ -46,6 +47,7 @@ BRIGHTNESS_CSV = (
     / "paired_dataset_with_brightness.csv"
 )
 DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"
+NAME_MAP_CSV = None  # overridden by --image-dir at runtime
 
 DINO_CHECKPOINT = ROOT / "model-training" / "best_efficientnet_multihead.pt"
 SSL_CHECKPOINT = ROOT / "model-training" / "ssl-pretrain" / "best_ssl_backbone.pt"
@@ -107,7 +109,27 @@ val_tf = transforms.Compose([
 ])
 
 
-def load_examples(split_csv: Path, metric: str) -> list[Example]:
+def load_name_map(image_dir: Path) -> dict[str, str]:
+    """Load filename_map.csv from the flat image dir if it exists."""
+    map_path = image_dir / "filename_map.csv"
+    if not map_path.exists():
+        return {}
+    remap = {}
+    with map_path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            remap[row["original_day_image"]] = row["resized_filename"]
+    return remap
+
+
+def resolve_image_path(rel: str, image_dir: Path, name_map: dict[str, str]) -> Path:
+    if name_map:
+        flat = name_map.get(rel)
+        if flat:
+            return image_dir / flat
+    return image_dir / rel
+
+
+def load_examples(split_csv: Path, metric: str, image_dir: Path, name_map: dict[str, str]) -> list[Example]:
     split_df = pd.read_csv(split_csv)
     brightness_df = pd.read_csv(BRIGHTNESS_CSV)
 
@@ -121,7 +143,7 @@ def load_examples(split_csv: Path, metric: str) -> list[Example]:
 
     examples = []
     for _, row in merged.iterrows():
-        day_path = DAY_IMAGE_ROOT / row["day_image"]
+        day_path = resolve_image_path(row["day_image"], image_dir, name_map)
         if not day_path.exists():
             continue
         examples.append(Example(
@@ -222,14 +244,21 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
-def run(backbone: str, metric: str, n_folds: int, seed: int, extra_features: bool) -> None:
+def run(backbone: str, metric: str, n_folds: int, seed: int, extra_features: bool, image_dir: Path) -> None:
     print(f"\n{'='*60}")
     print(f"Backbone: {backbone}  |  metric: {metric}  |  extra_features: {extra_features}")
+    print(f"Image dir: {image_dir}")
     print(f"{'='*60}")
 
+    name_map = load_name_map(image_dir)
+    if name_map:
+        print(f"Loaded filename map: {len(name_map)} entries")
+    else:
+        print("No filename map found, using original nested paths")
+
     print("Loading data...")
-    train_examples = load_examples(TRAIN_CSV, metric)
-    test_examples = load_examples(TEST_CSV, metric)
+    train_examples = load_examples(TRAIN_CSV, metric, image_dir, name_map)
+    test_examples = load_examples(TEST_CSV, metric, image_dir, name_map)
     print(f"Train: {len(train_examples)}  Test: {len(test_examples)}")
 
     print(f"Building EfficientNet embedder on {DEVICE}...")
@@ -334,6 +363,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=RANDOM_SEED)
     parser.add_argument("--extra-features", action="store_true",
                         help="Concatenate DINO counts + bbox areas alongside the embedding.")
+    parser.add_argument("--image-dir", type=Path, default=DAY_IMAGE_ROOT,
+                        help="Directory containing day images. If it has a filename_map.csv "
+                             "(from resize_for_hpc.py), flat filenames are used automatically.")
     return parser.parse_args()
 
 
@@ -346,4 +378,5 @@ if __name__ == "__main__":
         n_folds=args.folds,
         seed=args.seed,
         extra_features=args.extra_features,
+        image_dir=args.image_dir,
     )
