@@ -1,0 +1,2 @@
+backbone,metric,mae,rmse,r2
+ssl,gray_mean_zscore,0.474431,0.62748,0.47121

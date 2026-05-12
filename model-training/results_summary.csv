@@ -1,0 +1,4 @@
+backbone,n_train,metric,elapsed_min,val_mae_mean,val_mae_std,val_rmse_mean,val_rmse_std,val_r2_mean,val_r2_std,test_mae_mean,test_mae_std,test_rmse_mean,test_rmse_std,test_r2_mean,test_r2_std
+imagenet,800,gray_mean_zscore,4.26,0.541652,0.039866,0.709349,0.055626,0.517461,0.07254,0.485727,0.006828,0.629455,0.00734,0.467804,0.012404
+dino_counts,800,gray_mean_zscore,4.17,0.549761,0.036322,0.709681,0.049895,0.516505,0.073356,0.481059,0.014428,0.627585,0.013124,0.470801,0.022141
+ssl,800,gray_mean_zscore,4.32,0.511303,0.02802,0.689736,0.048574,0.542053,0.076222,0.497442,0.0152,0.647533,0.019541,0.43636,0.034402

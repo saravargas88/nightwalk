@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import csv
 from pathlib import Path
+from PIL import Image
 
 import torch
 import torch.nn as nn
@@ -47,7 +48,7 @@ OUTPUT_DIR = ROOT / "model-training" / "ssl-pretrain"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_EPOCHS = 100
-DEFAULT_BATCH_SIZE = 256
+DEFAULT_BATCH_SIZE = 64
 DEFAULT_LR = 3e-4
 DEFAULT_WEIGHT_DECAY = 1e-4
 DEFAULT_IMG_SIZE = 224

@@ -12,6 +12,7 @@ Run on HPC:
   python3 model-training/train_efficientnet_multihead.py
 """
 
+import csv
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -26,11 +27,14 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
+from PIL import Image, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 # ── Config ────────────────────────────────────────────────────────────────────
 # Path to the DINO counts CSV produced by dino_exps.py
-DINO_CSV    = Path("../dino_experiments/dino_counts/dino_efficientnet_train_images.csv")
-DINO_CSV    = Path("dino_counts/dino_counts_informed_prompt_3-pairs.csv")
-# Folder containing the resized day images uploaded to HPC
+DINO_CSV    = Path("dino_labels/13k-sample-all.csv")
+
+# Folder containing the day images
 IMAGE_DIR = Path("../urban-mosaic/washington-square")
 # Change these to point to the current directory
 SAVE_PATH   = Path("best_efficientnet_multihead.pt")
@@ -42,12 +46,10 @@ TARGETS     = ["tree", "streetlight", "storefront"]
 IMAGE_COL   = "image"
 
 N_SAMPLES   = None   # None = use all rows
-BATCH_SIZE  = 32
 NUM_EPOCHS  = 100
 BATCH_SIZE  = 64
-NUM_EPOCHS  = 50
 LR          = 1e-4
-IMG_SIZE    = 512
+IMG_SIZE    = 224
 NUM_WORKERS = 8
 VAL_SPLIT   = 0.2
 RANDOM_SEED = 42
@@ -71,24 +73,29 @@ class CountDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
-        from PIL import Image
         row      = self.df.iloc[idx]
         img_path = self.image_dir / row[IMAGE_COL]
-        print(f"Processing: {img_path}") # Uncomment this to see the filename
+        
         try:
-            image = Image.open(img_path).convert("RGB")
-            # Force load to catch truncation errors here instead of later
+            # 1. Open image
+            image = Image.open(img_path)
+            # 2. Force conversion to RGB immediately to handle Grayscale/RGBA
+            image = image.convert("RGB")
+            # 3. Force load to catch errors here
             image.load() 
         except Exception as e:
             print(f"  Warning: Skipping corrupt image {img_path}: {e}")
-            # Create a black dummy image if the file is broken
+            # Create a black dummy image if the file is truly broken
             image = Image.new("RGB", (IMG_SIZE, IMG_SIZE), (0, 0, 0))
 
         if self.transform:
-            image = self.transform(image)
+            try:
+                image = self.transform(image)
+            except Exception as e:
+                print(f"  Transform failed on {img_path}: {e}")
+                # Fallback to a zero tensor if transform crashes
+                image = torch.zeros((3, IMG_SIZE, IMG_SIZE))
         
-        if image.shape != (3, 512, 512):
-            print(f"!!! SHAPE MISMATCH at {img_path}: {image.shape}")
         labels = torch.tensor(row[self.targets].values.astype(np.float32))
         return image, labels
 
@@ -180,18 +187,57 @@ def train():
                           num_workers=NUM_WORKERS, pin_memory=(DEVICE != "cpu"))
     val_dl   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False,
                           num_workers=NUM_WORKERS, pin_memory=(DEVICE != "cpu"))
+    
+    model = EfficientNetMultiHead(targets=TARGETS).to(DEVICE)
+    
+    # --- STEP 2: THE LOADING LOGIC ---
+    START_EPOCH = 0
+    best_val_loss = float("inf")
+    saved_optimizer_state = None # Initialize these so they exist
+    saved_scheduler_state = None
+    saved_scaler_state = None
 
-    model     = EfficientNetMultiHead(targets=TARGETS).to(DEVICE)
+    if SAVE_PATH.exists():
+        print(f"--- Found checkpoint at {SAVE_PATH} ---")
+        ckpt = torch.load(SAVE_PATH, map_location=DEVICE)
+        
+        if isinstance(ckpt, dict) and 'model_state_dict' in ckpt:
+            model.load_state_dict(ckpt['model_state_dict'])
+            saved_optimizer_state = ckpt.get('optimizer_state_dict')
+            saved_scheduler_state = ckpt.get('scheduler_state_dict')
+            saved_scaler_state = ckpt.get('scaler_state_dict')
+            
+            START_EPOCH = ckpt['epoch'] + 1
+            best_val_loss = ckpt['best_val_loss'] # LOADED HERE
+            print(f"Successfully loaded full checkpoint. Resuming from epoch {START_EPOCH}")
+        else:
+            model.load_state_dict(ckpt)
+            START_EPOCH = 45 
+            print("Old weight format detected. Manually starting from epoch 45.")
+    
+    # 2. Define Optimizer, Scheduler, and Scaler
     optimizer = AdamW(model.parameters(), lr=LR, weight_decay=1e-3)
     scheduler = CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS)
-    criterion = nn.HuberLoss()
-
-    best_val_loss = float("inf")
-    log_path = SAVE_PATH.parent / "training_log.csv"
-    log_rows  = []
     scaler = torch.amp.GradScaler('cuda')
+    criterion = nn.HuberLoss()
+    # REMOVED: best_val_loss = float("inf")  <-- DO NOT OVERWRITE HERE
 
-    for epoch in range(NUM_EPOCHS):
+    # 3. Restore Optimizer/Scheduler states if they exist
+    if saved_optimizer_state is not None:
+        optimizer.load_state_dict(saved_optimizer_state)
+        if saved_scheduler_state: scheduler.load_state_dict(saved_scheduler_state)
+        if saved_scaler_state: scaler.load_state_dict(saved_scaler_state)
+
+    # --- 3b. Setup CSV Logging ---
+    log_path = SAVE_PATH.parent / "training_log.csv"
+    if not log_path.exists() or START_EPOCH == 0:
+        import csv
+        with open(log_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["epoch", "train_loss", "val_loss"] + TARGETS)
+            writer.writeheader()
+
+    # 4. The Training Loop
+    for epoch in range(START_EPOCH, NUM_EPOCHS):
         model.train()
         train_loss = 0.0
         
@@ -233,17 +279,40 @@ def train():
         val_loss   /= len(val_dl)
         scheduler.step()
 
+        # 1. First, concatenate and calculate MAE
         all_preds  = torch.cat(all_preds)
         all_labels = torch.cat(all_labels)
-        mae     = per_target_mae(all_preds, all_labels, TARGETS)
+        mae = per_target_mae(all_preds, all_labels, TARGETS) # <--- mae is defined here
+        
         mae_str = "  ".join(f"{t}={v:.2f}" for t, v in mae.items())
         print(f"Epoch {epoch+1:03d}/{NUM_EPOCHS}  train={train_loss:.4f}  val={val_loss:.4f}  MAE: {mae_str}")
 
+        # 2. NOW you can save to CSV (because 'mae' exists now)
+        row = {
+            "epoch": epoch + 1,
+            "train_loss": round(train_loss, 6),
+            "val_loss": round(val_loss, 6),
+            **{t: round(v, 4) for t, v in mae.items()}
+        }
+        with open(log_path, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=row.keys())
+            writer.writerow(row)
+
+        # 3. Then handle your checkpoint saving
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             SAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            torch.save(model.state_dict(), SAVE_PATH)
-            print(f"  Saved best model to {SAVE_PATH}")
+            
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
+                'best_val_loss': best_val_loss,
+                'scaler_state_dict': scaler.state_dict(), # Since you use torch.amp
+            }
+            torch.save(checkpoint, SAVE_PATH)
+            print(f"  Saved full checkpoint to {SAVE_PATH} (Epoch {epoch+1})")
 
         if (epoch + 1) % SAVE_PREDS_EVERY == 0:
             save_predictions(val_df, all_preds, TARGETS, epoch + 1)
