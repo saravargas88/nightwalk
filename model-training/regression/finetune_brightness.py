@@ -412,7 +412,8 @@ def train_fold(
         ],
         weight_decay=WEIGHT_DECAY,
     )
-    scheduler = CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS)
+    # Cosine anneal only over the epochs where the backbone is actually training
+    scheduler = CosineAnnealingLR(optimizer, T_max=max(NUM_EPOCHS - warmup_epochs, 1))
 
     best_val_loss = float("inf")
     best_val_metrics: dict[str, float] = {}
@@ -459,7 +460,8 @@ def train_fold(
                     all_preds.append(preds.cpu())
                     all_targets.append(targets.cpu())
 
-            scheduler.step()
+            if epoch > warmup_epochs:
+                scheduler.step()
             train_loss /= max(len(train_dl), 1)
             val_loss /= max(len(val_dl), 1)
 
