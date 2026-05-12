@@ -260,7 +260,7 @@ def save_predictions(
         for ex, pred_row, label_row in zip(examples, preds_np, labels_np):
             row = {
                 "night_photo": ex.night_photo,
-                "day_image": Path(ex.image_path).relative_to(DAY_IMAGE_ROOT).as_posix(),
+                "day_image": ex.day_image,
             }
             for i, target in enumerate(TARGETS):
                 row[f"actual_{target}"] = round(float(label_row[i]), 4)
