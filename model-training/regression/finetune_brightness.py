@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """finetune_brightness.py
 
 Fine-tunes EfficientNet-B0 to predict nighttime brightness (regression)
@@ -591,16 +592,13 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    import sys as _sys
     print(f"Using device: {DEVICE}")
     args = parse_args()
 
     # Apply CLI overrides to module-level constants so train_fold picks them up
-    global NUM_EPOCHS, DINO_LR_BACKBONE, DINO_WARMUP_EPOCHS
     NUM_EPOCHS = args.epochs
     if args.lr_backbone is not None:
         DINO_LR_BACKBONE = args.lr_backbone
-        LR_BACKBONE = args.lr_backbone  # also override the non-dino default if explicitly set
     if args.warmup_epochs is not None:
         DINO_WARMUP_EPOCHS = args.warmup_epochs
 
