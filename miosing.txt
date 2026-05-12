@@ -1,0 +1,115 @@
+── Fold 5/5  (train=621, val=155) ──
+  WARNING: 309 backbone keys missing: ['features.0.0.weight', 'features.0.1.weight', 'features.0.1.bias', 'features.0.1.running_mean', 'features.0.1.running_var']
+  Loaded DINO counts backbone — missing=313 unexpected=0
+  Epoch 001/30  train=0.4052  val=0.3658  mae=0.7405  rmse=0.9012  r2=0.2117
+  Epoch 002/30  train=0.3145  val=0.2714  mae=0.6090  rmse=0.7746  r2=0.4176
+  Epoch 003/30  train=0.2593  val=0.2160  mae=0.5217  rmse=0.6832  r2=0.5470
+  Epoch 004/30  train=0.2306  val=0.2465  mae=0.5807  rmse=0.7274  r2=0.4865
+  Epoch 005/30  train=0.2011  val=0.2430  mae=0.5682  rmse=0.7188  r2=0.4986
+  Epoch 006/30  train=0.1546  val=0.2136  mae=0.5255  rmse=0.6705  r2=0.5637
+  Epoch 007/30  train=0.1427  val=0.2097  mae=0.5175  rmse=0.6643  r2=0.5717
+  Epoch 008/30  train=0.1424  val=0.2333  mae=0.5629  rmse=0.7048  r2=0.5178
+  Epoch 009/30  train=0.1256  val=0.2011  mae=0.5012  rmse=0.6561  r2=0.5821
+  Epoch 010/30  train=0.1133  val=0.2366  mae=0.5591  rmse=0.7105  r2=0.5100
+  Epoch 011/30  train=0.1130  val=0.2106  mae=0.5189  rmse=0.6698  r2=0.5645
+  Epoch 012/30  train=0.1095  val=0.1979  mae=0.4978  rmse=0.6497  r2=0.5902
+  Epoch 013/30  train=0.0922  val=0.1939  mae=0.4899  rmse=0.6443  r2=0.5971
+  Epoch 014/30  train=0.0940  val=0.1918  mae=0.4914  rmse=0.6389  r2=0.6038
+  Epoch 015/30  train=0.1145  val=0.2122  mae=0.5230  rmse=0.6732  r2=0.5602
+  Epoch 016/30  train=0.0826  val=0.1905  mae=0.4910  rmse=0.6351  r2=0.6086
+  Epoch 017/30  train=0.0988  val=0.1913  mae=0.4949  rmse=0.6315  r2=0.6129
+  Epoch 018/30  train=0.0859  val=0.1959  mae=0.4961  rmse=0.6413  r2=0.6008
+  Epoch 019/30  train=0.0899  val=0.2014  mae=0.5069  rmse=0.6482  r2=0.5921
+  Epoch 020/30  train=0.0779  val=0.2030  mae=0.5100  rmse=0.6518  r2=0.5877
+  Epoch 021/30  train=0.0771  val=0.1980  mae=0.5054  rmse=0.6447  r2=0.5965
+  Epoch 022/30  train=0.0799  val=0.2027  mae=0.5051  rmse=0.6514  r2=0.5882
+  Epoch 023/30  train=0.0792  val=0.1890  mae=0.4898  rmse=0.6304  r2=0.6143
+  Epoch 024/30  train=0.0612  val=0.1956  mae=0.5010  rmse=0.6418  r2=0.6002
+  Epoch 025/30  train=0.0774  val=0.1906  mae=0.4911  rmse=0.6336  r2=0.6104
+  Epoch 026/30  train=0.0762  val=0.1921  mae=0.4958  rmse=0.6366  r2=0.6067
+  Epoch 027/30  train=0.0834  val=0.1887  mae=0.4882  rmse=0.6296  r2=0.6153
+  Epoch 028/30  train=0.0733  val=0.1953  mae=0.4965  rmse=0.6419  r2=0.6001
+  Epoch 029/30  train=0.0733  val=0.1936  mae=0.4949  rmse=0.6365  r2=0.6068
+  Epoch 030/30  train=0.0699  val=0.1913  mae=0.4913  rmse=0.6328  r2=0.6113
+  Val best  → mae=0.4882  rmse=0.6296  r2=0.6153
+  Evaluating fold 4 best model on test split...
+  Test      → mae=0.4689  rmse=0.6142  r2=0.4934
+
+── 5-fold summary ──────────────────────────────
+                             MAE                  RMSE                    R²
+  Val       0.5498 ± 0.0363  0.7097 ± 0.0499  0.5165 ± 0.0734
+  Test      0.4811 ± 0.0144  0.6276 ± 0.0131  0.4708 ± 0.0221
+✓ Done (4.17 min)
+
+✓ Results saved → /home/bia/NightWalk/model-training/results_summary.csv
+
+[3/3] backbone=ssl
+
+============================================================
+Fine-tuning: backbone=ssl  n_train=800  metric=gray_mean_zscore
+============================================================
+Using device: cuda
+
+============================================================
+Backbone: ssl  |  n_train: 800  |  metric: gray_mean_zscore  |  folds: 5
+============================================================
+Loaded 776 train examples with metric 'gray_mean_zscore'
+Loaded 196 test examples with metric 'gray_mean_zscore'
+Using 776 training examples for this run
+
+── Fold 1/5  (train=622, val=154) ──
+  Loaded SSL backbone from best_ssl_backbone.pt
+  Epoch 001/30  train=0.3280  val=0.3610  mae=0.7124  rmse=0.9413  r2=0.3183
+  Epoch 002/30  train=0.2322  val=0.3266  mae=0.6794  rmse=0.8760  r2=0.4096
+  Epoch 003/30  train=0.2133  val=0.3118  mae=0.6491  rmse=0.8557  r2=0.4366
+  Epoch 004/30  train=0.1810  val=0.2896  mae=0.6124  rmse=0.8282  r2=0.4723
+  Epoch 005/30  train=0.1772  val=0.2735  mae=0.6041  rmse=0.7938  r2=0.5153
+  Epoch 006/30  train=0.1578  val=0.2693  mae=0.5981  rmse=0.7869  r2=0.5236
+  Epoch 007/30  train=0.1377  val=0.2597  mae=0.5839  rmse=0.7656  r2=0.5491
+  Epoch 008/30  train=0.1109  val=0.2537  mae=0.5722  rmse=0.7610  r2=0.5545
+  Epoch 009/30  train=0.1166  val=0.2477  mae=0.5634  rmse=0.7523  r2=0.5645
+  Epoch 010/30  train=0.1123  val=0.2574  mae=0.5806  rmse=0.7590  r2=0.5567
+  Epoch 011/30  train=0.1059  val=0.2458  mae=0.5670  rmse=0.7533  r2=0.5635
+  Epoch 012/30  train=0.0885  val=0.2534  mae=0.5765  rmse=0.7566  r2=0.5596
+  Epoch 013/30  train=0.0788  val=0.2505  mae=0.5670  rmse=0.7576  r2=0.5584
+  Epoch 014/30  train=0.0726  val=0.2474  mae=0.5630  rmse=0.7516  r2=0.5653
+  Epoch 015/30  train=0.0796  val=0.2445  mae=0.5642  rmse=0.7451  r2=0.5729
+  Epoch 016/30  train=0.0715  val=0.2445  mae=0.5621  rmse=0.7459  r2=0.5720
+  Epoch 017/30  train=0.0704  val=0.2357  mae=0.5524  rmse=0.7306  r2=0.5893
+  Epoch 018/30  train=0.0704  val=0.2385  mae=0.5531  rmse=0.7375  r2=0.5816
+  Epoch 019/30  train=0.0656  val=0.2365  mae=0.5510  rmse=0.7291  r2=0.5910
+  Epoch 020/30  train=0.0639  val=0.2364  mae=0.5447  rmse=0.7325  r2=0.5872
+  Epoch 021/30  train=0.0613  val=0.2370  mae=0.5538  rmse=0.7320  r2=0.5878
+  Epoch 022/30  train=0.0625  val=0.2370  mae=0.5516  rmse=0.7315  r2=0.5884
+  Epoch 023/30  train=0.0546  val=0.2392  mae=0.5567  rmse=0.7330  r2=0.5867
+  Epoch 024/30  train=0.0536  val=0.2361  mae=0.5513  rmse=0.7275  r2=0.5928
+  Epoch 025/30  train=0.0593  val=0.2354  mae=0.5512  rmse=0.7261  r2=0.5944
+  Epoch 026/30  train=0.0541  val=0.2345  mae=0.5445  rmse=0.7278  r2=0.5925
+  Epoch 027/30  train=0.0536  val=0.2328  mae=0.5447  rmse=0.7245  r2=0.5962
+  Epoch 028/30  train=0.0590  val=0.2315  mae=0.5414  rmse=0.7220  r2=0.5989
+  Epoch 029/30  train=0.0531  val=0.2322  mae=0.5486  rmse=0.7194  r2=0.6019
+  Epoch 030/30  train=0.0612  val=0.2338  mae=0.5474  rmse=0.7243  r2=0.5964
+  Val best  → mae=0.5414  rmse=0.7220  r2=0.5989
+  Evaluating fold 0 best model on test split...
+  Test      → mae=0.4744  rmse=0.6275  r2=0.4712
+
+── Fold 2/5  (train=621, val=155) ──
+  Loaded SSL backbone from best_ssl_backbone.pt
+  Epoch 001/30  train=0.3700  val=0.2475  mae=0.5789  rmse=0.7257  r2=0.3757
+  Epoch 002/30  train=0.2645  val=0.2529  mae=0.5772  rmse=0.7403  r2=0.3503
+  Epoch 003/30  train=0.2364  val=0.2576  mae=0.5898  rmse=0.7455  r2=0.3411
+  Epoch 004/30  train=0.2057  val=0.2435  mae=0.5725  rmse=0.7287  r2=0.3705
+  Epoch 005/30  train=0.1797  val=0.2378  mae=0.5537  rmse=0.7222  r2=0.3816
+  Epoch 006/30  train=0.1493  val=0.2236  mae=0.5397  rmse=0.6969  r2=0.4242
+  Epoch 007/30  train=0.1473  val=0.2304  mae=0.5494  rmse=0.7100  r2=0.4023
+  Epoch 008/30  train=0.1307  val=0.2188  mae=0.5326  rmse=0.6923  r2=0.4317
+  Epoch 009/30  train=0.1214  val=0.2184  mae=0.5253  rmse=0.6964  r2=0.4250
+  Epoch 010/30  train=0.1101  val=0.2332  mae=0.5445  rmse=0.7238  r2=0.3789
+  Epoch 011/30  train=0.1006  val=0.2270  mae=0.5378  rmse=0.7073  r2=0.4068
+  Epoch 012/30  train=0.0971  val=0.2169  mae=0.5185  rmse=0.6950  r2=0.4273
+  Epoch 013/30  train=0.0907  val=0.2191  mae=0.5263  rmse=0.6949  r2=0.4275
+  Epoch 014/30  train=0.0790  val=0.2156  mae=0.5202  rmse=0.6911  r2=0.4338
+  Epoch 015/30  train=0.0864  val=0.2166  mae=0.5210  rmse=0.6917  r2=0.4328
+  Epoch 016/30  train=0.0811  val=0.2196  mae=0.5254  rmse=0.6981  r2=0.4222
+  Epoch 017/30  train=0.0711  val=0.2181  mae=0.5176  rmse=0.6971  r2=0.4239
+  Epoch 018/30  train=0.0709  val=0.2162  mae=0.5189  rmse=0.6960  r2=0.4257
