@@ -30,6 +30,8 @@ from torchvision import transforms
 from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
 
+import argparse
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_CSV = ROOT / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
 DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"
@@ -120,13 +122,27 @@ val_tf = transforms.Compose([
 ])
 
 
-def load_examples() -> list[Example]:
+def load_name_map(image_dir: Path) -> dict:
+    map_path = image_dir / "filename_map.csv"
+    if not map_path.exists():
+        return {}
+    remap = {}
+    with map_path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            remap[row["original_day_image"]] = row["resized_filename"]
+    return remap
+
+
+def load_examples(image_dir: Path) -> list[Example]:
+    name_map = load_name_map(image_dir)
     with DATA_CSV.open(newline="") as handle:
         rows = list(csv.DictReader(handle))
 
     examples: list[Example] = []
     for row in rows:
-        day_path = DAY_IMAGE_ROOT / row[IMAGE_COL]
+        rel = row[IMAGE_COL]
+        flat = name_map.get(rel)
+        day_path = image_dir / flat if flat else image_dir / rel
         if not day_path.exists():
             continue
         targets = [float(row[target]) for target in TARGETS]
@@ -253,8 +269,8 @@ def save_predictions(
     print(f"  Saved predictions to {out_path}")
 
 
-def train() -> None:
-    examples = load_examples()
+def train(image_dir: Path) -> None:
+    examples = load_examples(image_dir)
     train_raw, val_raw = split_examples(examples)
     print(f"Loaded examples: {len(examples)}")
     print(f"Train: {len(train_raw)}  Val: {len(val_raw)}")
@@ -390,5 +406,9 @@ def train() -> None:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--image-dir", type=Path, default=DAY_IMAGE_ROOT,
+                        help="Directory containing day images (use nightwalk-images-224 on HPC).")
+    args = parser.parse_args()
     print(f"Using device: {DEVICE}")
-    train()
+    train(image_dir=args.image_dir)
