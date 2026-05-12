@@ -19,10 +19,10 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from sklearn.model_selection import train_test_split
 
 # ── Config ────────────────────────────────────────────────────────────────────
-ROOT       = Path(__file__).parent.parent
+ROOT       = Path(__file__).resolve().parent.parent.parent
 IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"
 CSV_PATH   = ROOT / "dino_experiments" / "dino_counts" / "dino_counts_informed_prompt_3.csv"
-PREDS_DIR  = Path("val_predictions")        # where to save per-epoch prediction CSVs
+PREDS_DIR  = Path(__file__).resolve().parent.parent / "val_predictions"
 TARGETS    = ["tree", "streetlight", "storefront"]
 N_SAMPLES  = 1500          # set to None to use full dataset
 BATCH_SIZE = 16

@@ -31,14 +31,16 @@ from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # ── Config ────────────────────────────────────────────────────────────────────
+_MODEL_TRAINING = Path(__file__).resolve().parent.parent
+_ROOT = _MODEL_TRAINING.parent
+
 # Path to the DINO counts CSV produced by dino_exps.py
-DINO_CSV    = Path("dino_labels/13k-sample-all.csv")
+DINO_CSV    = _MODEL_TRAINING / "dino_labels" / "13k-sample-all.csv"
 
 # Folder containing the day images
-IMAGE_DIR = Path("../urban-mosaic/washington-square")
-# Change these to point to the current directory
-SAVE_PATH   = Path("best_efficientnet_multihead.pt")
-PREDS_DIR   = Path("val_predictions_multihead")
+IMAGE_DIR = _ROOT / "urban-mosaic" / "washington-square"
+SAVE_PATH   = _MODEL_TRAINING / "best_efficientnet_multihead.pt"
+PREDS_DIR   = _MODEL_TRAINING / "val_predictions_multihead"
 
 # Column names in the DINO CSV that are regression targets
 TARGETS     = ["tree", "streetlight", "storefront"]

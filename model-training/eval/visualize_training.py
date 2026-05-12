@@ -20,8 +20,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-VAL_PREDS_DIR = Path("model-training/efficientnet-train-epoch")
-OUTPUT_DIR = Path("model-training")
+_MODEL_TRAINING = Path(__file__).resolve().parent.parent
+VAL_PREDS_DIR = _MODEL_TRAINING / "efficientnet-train-epoch"
+OUTPUT_DIR = _MODEL_TRAINING
 TARGETS = ["tree", "streetlight", "storefront"]
 
 

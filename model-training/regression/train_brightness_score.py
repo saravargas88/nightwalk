@@ -32,7 +32,7 @@ from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
 import argparse
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_CSV = ROOT / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
 TRAIN_CSV = ROOT / "splits" / "train_split.csv"
 TEST_CSV = ROOT / "splits" / "test_split.csv"
@@ -278,7 +278,7 @@ def save_predictions(
     print(f"  Saved predictions to {out_path}")
 
 
-def train(image_dir: Path, num_epochs: int = NUM_EPOCHS, lr_backbone: float = LR_BACKBONE, lr_head: float = LR_HEAD) -> None:
+def train(image_dir: Path, num_epochs: int = NUM_EPOCHS, lr_backbone: float = LR_BACKBONE, lr_head: float = LR_HEAD, output_dir: Path = OUTPUT_DIR) -> None:
     examples = load_examples(image_dir, TRAIN_CSV)
     train_raw, val_raw = split_examples(examples)
     print(f"Loaded examples: {len(examples)}")

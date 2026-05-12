@@ -47,7 +47,7 @@ from torchvision import transforms
 from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 TRAIN_CSV = ROOT / "splits" / "train_split.csv"
 TEST_CSV = ROOT / "splits" / "test_split.csv"
 BRIGHTNESS_CSV = (
@@ -63,7 +63,7 @@ OUTPUT_BASE = ROOT / "model-training" / "finetune-runs"
 
 # ── Hyperparameters ───────────────────────────────────────────────────────────
 BATCH_SIZE = 16
-NUM_EPOCHS = 30
+NUM_EPOCHS = 40
 LR_HEAD = 3e-4
 LR_BACKBONE = 3e-5
 WEIGHT_DECAY = 1e-4
@@ -71,6 +71,10 @@ IMG_SIZE = 224
 NUM_WORKERS = 8
 SAVE_PRED_EVERY = 5
 RANDOM_SEED = 42
+
+# Backbone-specific overrides applied in train_fold when backbone == "dino_counts"
+DINO_LR_BACKBONE = 1e-5   # lower LR — backbone already has useful representations
+DINO_WARMUP_EPOCHS = 10   # freeze backbone, train head-only first
 
 AVAILABLE_METRICS = [
     "gray_mean",
@@ -378,11 +382,15 @@ def train_fold(
     model = EfficientNetRegressor().to(DEVICE)
     load_backbone(model, backbone)
 
+    # dino_counts backbone: use lower LR + warmup freeze to prevent overfitting
+    effective_lr_backbone = DINO_LR_BACKBONE if backbone == "dino_counts" else LR_BACKBONE
+    warmup_epochs = DINO_WARMUP_EPOCHS if backbone == "dino_counts" else 0
+
     criterion = nn.HuberLoss()
     optimizer = AdamW(
         [
-            {"params": model.features.parameters(), "lr": LR_BACKBONE},
-            {"params": model.avgpool.parameters(), "lr": LR_BACKBONE},
+            {"params": model.features.parameters(), "lr": effective_lr_backbone},
+            {"params": model.avgpool.parameters(), "lr": effective_lr_backbone},
             {"params": model.head.parameters(), "lr": LR_HEAD},
         ],
         weight_decay=WEIGHT_DECAY,
@@ -402,6 +410,16 @@ def train_fold(
         writer.writeheader()
 
         for epoch in range(1, NUM_EPOCHS + 1):
+            # Warmup: backbone frozen for first N epochs, then thawed
+            if epoch == 1 and warmup_epochs > 0:
+                for p in model.features.parameters():
+                    p.requires_grad_(False)
+                print(f"  Backbone frozen for warmup ({warmup_epochs} epochs)")
+            elif epoch == warmup_epochs + 1 and warmup_epochs > 0:
+                for p in model.features.parameters():
+                    p.requires_grad_(True)
+                print(f"  Backbone unfrozen at epoch {epoch}")
+
             model.train()
             train_loss = 0.0
             for images, targets in train_dl:
@@ -476,9 +494,12 @@ def train(
     metric: str,
     n_folds: int,
     seed: int,
+    run_tag: str = "",
 ) -> tuple[dict, dict, dict, dict]:
     print(f"\n{'='*60}")
     print(f"Backbone: {backbone}  |  n_train: {n_train}  |  metric: {metric}  |  folds: {n_folds}")
+    if run_tag:
+        print(f"Run tag: {run_tag}")
     print(f"{'='*60}")
 
     train_examples = load_train_examples(metric)
@@ -488,7 +509,8 @@ def train(
     print(f"Using {len(sampled)} training examples for this run")
 
     folds = make_kfold_splits(sampled, n_folds, seed)
-    run_dir = OUTPUT_BASE / backbone / f"n{n_train}"
+    folder_name = f"n{n_train}" + (f"_{run_tag}" if run_tag else "")
+    run_dir = OUTPUT_BASE / backbone / folder_name
 
     fold_val_metrics = []
     fold_test_metrics = []
@@ -557,16 +579,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--metric", default=DEFAULT_METRIC, choices=AVAILABLE_METRICS)
     parser.add_argument("--folds", type=int, default=DEFAULT_FOLDS)
     parser.add_argument("--seed", type=int, default=RANDOM_SEED)
+    parser.add_argument("--epochs", type=int, default=NUM_EPOCHS)
+    parser.add_argument("--lr-backbone", type=float, default=None,
+                        help="Override backbone LR (defaults: dino_counts=1e-5, others=3e-5)")
+    parser.add_argument("--warmup-epochs", type=int, default=None,
+                        help="Override warmup freeze epochs (default: dino_counts=10, others=0)")
+    parser.add_argument("--run-tag", type=str, default="",
+                        help="Suffix appended to the output folder (e.g. 'warmup10_lr1e5'). "
+                             "Lets you keep multiple runs side by side for comparison.")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
+    import sys as _sys
     print(f"Using device: {DEVICE}")
     args = parse_args()
+
+    # Apply CLI overrides to module-level constants so train_fold picks them up
+    global NUM_EPOCHS, DINO_LR_BACKBONE, DINO_WARMUP_EPOCHS
+    NUM_EPOCHS = args.epochs
+    if args.lr_backbone is not None:
+        DINO_LR_BACKBONE = args.lr_backbone
+        LR_BACKBONE = args.lr_backbone  # also override the non-dino default if explicitly set
+    if args.warmup_epochs is not None:
+        DINO_WARMUP_EPOCHS = args.warmup_epochs
+
     train(
         backbone=args.backbone,
         n_train=args.n_train,
         metric=args.metric,
         n_folds=args.folds,
         seed=args.seed,
+        run_tag=args.run_tag,
     )

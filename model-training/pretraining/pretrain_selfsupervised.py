@@ -42,7 +42,7 @@ except ImportError:
     )
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 IMAGE_DIR = ROOT / "urban-mosaic" / "washington-square"
 OUTPUT_DIR = ROOT / "model-training" / "ssl-pretrain"
 

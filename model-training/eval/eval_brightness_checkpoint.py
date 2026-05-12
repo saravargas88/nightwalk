@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 TEST_CSV = ROOT / "splits" / "test_split.csv"
 BRIGHTNESS_CSV = (
     ROOT / "brightnessmetricexperiments"

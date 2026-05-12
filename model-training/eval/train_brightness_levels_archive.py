@@ -32,7 +32,7 @@ from torchvision import transforms
 from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_CSV = ROOT / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
 DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"
 CHECKPOINT_PATH = ROOT / "model-training" / "best_efficientnet_multihead.pt"

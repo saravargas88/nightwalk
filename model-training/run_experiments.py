@@ -33,8 +33,8 @@ OUTPUT_BASE = ROOT / "model-training" / "finetune-runs"
 RESULTS_SUMMARY = ROOT / "model-training" / "results_summary.csv"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SSL_SCRIPT = SCRIPT_DIR / "pretrain_selfsupervised.py"
-FINETUNE_SCRIPT = SCRIPT_DIR / "finetune_brightness.py"
+SSL_SCRIPT = SCRIPT_DIR / "pretraining" / "pretrain_selfsupervised.py"
+FINETUNE_SCRIPT = SCRIPT_DIR / "regression" / "finetune_brightness.py"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 ALL_BACKBONES = ["imagenet", "dino_counts", "ssl"]
