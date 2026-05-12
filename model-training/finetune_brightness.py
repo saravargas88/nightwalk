@@ -242,6 +242,7 @@ def load_backbone(model: EfficientNetRegressor, backbone: str) -> None:
         if not DINO_CHECKPOINT.exists():
             raise FileNotFoundError(f"DINO counts checkpoint not found: {DINO_CHECKPOINT}")
         state = torch.load(DINO_CHECKPOINT, map_location="cpu")
+        state = state["model_state_dict"]
         remapped = {}
         for key, value in state.items():
             if key.startswith("backbone."):
