@@ -62,17 +62,10 @@ SAVE_PATH   = _MODEL_TRAINING / "best_efficientnet_multihead_v2.pt"
 PREDS_DIR   = _MODEL_TRAINING / "val_predictions_multihead_v2"
 IMAGE_COL   = "image"
 
-# Count targets + bbox area targets + centroid targets
-COUNT_TARGETS    = ["tree", "streetlight", "storefront"]
-BBOX_TARGETS     = ["bbox_area_sum_tree", "bbox_area_sum_streetlight", "bbox_area_sum_storefront"]
-CENTROID_TARGETS = [
-    "bbox_cx_tree",        "bbox_cy_tree",
-    "bbox_cx_streetlight", "bbox_cy_streetlight",
-    "bbox_cx_storefront",  "bbox_cy_storefront",
-]
-ALL_POSSIBLE_TARGETS = COUNT_TARGETS + BBOX_TARGETS + CENTROID_TARGETS
-# Actual targets used are resolved at runtime based on which columns exist in the CSV
-TARGETS = ALL_POSSIBLE_TARGETS
+# Count targets + bbox area targets
+COUNT_TARGETS = ["tree", "streetlight", "storefront"]
+BBOX_TARGETS  = ["bbox_area_sum_tree", "bbox_area_sum_streetlight", "bbox_area_sum_storefront"]
+TARGETS       = COUNT_TARGETS + BBOX_TARGETS
 
 N_SAMPLES    = None
 NUM_EPOCHS   = 100
@@ -291,6 +284,7 @@ def train(image_dir: Path, save_path: Path):
         if saved_scaler_state and scaler: scaler.load_state_dict(saved_scaler_state)
 
     log_path = save_path.parent / "training_log_v2.csv"
+    save_path.parent.mkdir(parents=True, exist_ok=True)
     if not log_path.exists() or START_EPOCH == 0:
         with open(log_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["epoch", "train_loss", "val_loss"] + active_targets)
