@@ -112,12 +112,11 @@ def save(fig, name: str) -> None:
 def fig_val_test_r2() -> None:
     # (backbone_key, run_folder, display_label, color)
     conditions = [
-        ("imagenet",    "n800",                     "ImageNet",                    COLORS["imagenet"]),
-        ("ssl",         "n800",                     "SSL",                         COLORS["ssl"]),
-        ("dino_counts", "n800",                     "DINO-counts v1\n(no warmup)", COLORS["dino_counts"]),
-        ("dino_counts", "n800_warmup10_lr1e5",      "DINO-counts v1\n(warmup)",    "#81C784"),
-        ("dino_counts", "n800_warmup10_lr1e5_cosfix","DINO-counts v1\n(+ cosine)", "#2E7D32"),
-        ("dino_counts", "n800_v2bbox",              "DINO-counts v2\n(bbox)",      COLORS["dino_counts_v2"]),
+        ("imagenet",    "n800",                      "ImageNet",                   COLORS["imagenet"]),
+        ("ssl",         "n800",                      "SSL",                        COLORS["ssl"]),
+        ("dino_counts", "n800",                      "DINO-counts v1",             COLORS["dino_counts"]),
+        ("dino_counts", "n800_warmup10_lr1e5_cosfix","DINO-counts v1\n+ warmup",   "#2E7D32"),
+        ("dino_counts", "n800_v2bbox",               "DINO-counts v2\n(bbox) + warmup", COLORS["dino_counts_v2"]),
     ]
 
     val_means, val_stds, test_means, test_stds, labels, colors = [], [], [], [], [], []
@@ -164,15 +163,68 @@ def fig_val_test_r2() -> None:
     plt.close(fig)
 
 
+# ── Figure 1b: Clean test R² bar chart for paper ─────────────────────────────
+def fig_test_r2_paper() -> None:
+    # Static entries including ridge baseline (no fold data needed)
+    RIDGE_R2 = 0.081
+
+    conditions = [
+        ("imagenet",    "n800",                      "ImageNet",                    COLORS["imagenet"]),
+        ("ssl",         "n800",                      "SSL",                         COLORS["ssl"]),
+        ("dino_counts", "n800",                      "DINO-counts v1",              COLORS["dino_counts"]),
+        ("dino_counts", "n800_warmup10_lr1e5_cosfix","DINO-counts v1\n+ warmup",    "#2E7D32"),
+        ("dino_counts", "n800_v2bbox",               "DINO-counts v2\n(bbox) + warmup", COLORS["dino_counts_v2"]),
+    ]
+
+    labels = ["Ridge\n(DINO counts)"]
+    means  = [RIDGE_R2]
+    stds   = [0.0]
+    colors = ["#9E9E9E"]
+
+    for backbone, run, label, color in conditions:
+        test_rows = load_test_summary(backbone, run)
+        if not test_rows:
+            print(f"  Skipping {backbone}/{run}")
+            continue
+        r2s = [float(r["r2"]) for r in test_rows]
+        m, s = mean_std(r2s)
+        labels.append(label); means.append(m); stds.append(s); colors.append(color)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    x = np.arange(len(labels))
+    bars = ax.bar(x, means, yerr=stds, capsize=4, color=colors,
+                  edgecolor="none", width=0.6)
+
+    # Annotate each bar
+    for bar, m in zip(bars, means):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+                f"{m:.3f}", ha="center", va="bottom", fontsize=9)
+
+    ax.set_ylabel(r"Test $R^2$")
+    ax.set_title(r"Brightness prediction $R^2$ by model")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=10)
+    ax.set_ylim(0, 0.58)
+    ax.axhline(0, color="black", linewidth=0.5)
+
+    # Highlight best model
+    best_idx = int(np.argmax(means))
+    bars[best_idx].set_edgecolor("black")
+    bars[best_idx].set_linewidth(1.5)
+
+    fig.tight_layout()
+    save(fig, "fig1b_test_r2_paper")
+    plt.close(fig)
+
+
 # ── Figure 2: Val loss training curves ────────────────────────────────────────
 def fig_training_curves() -> None:
     conditions = [
-        ("imagenet",    "n800",                      "ImageNet",                     COLORS["imagenet"]),
-        ("ssl",         "n800",                      "SSL",                          COLORS["ssl"]),
-        ("dino_counts", "n800",                      "DINO-counts v1 (no warmup)",   COLORS["dino_counts"]),
-        ("dino_counts", "n800_warmup10_lr1e5",       "DINO-counts v1 (warmup)",      "#81C784"),
-        ("dino_counts", "n800_warmup10_lr1e5_cosfix","DINO-counts v1 (cosine fix)",  "#2E7D32"),
-        ("dino_counts", "n800_v2bbox",               "DINO-counts v2 (bbox)",        COLORS["dino_counts_v2"]),
+        ("imagenet",    "n800",                      "ImageNet",                      COLORS["imagenet"]),
+        ("ssl",         "n800",                      "SSL",                           COLORS["ssl"]),
+        ("dino_counts", "n800",                      "DINO-counts v1",                COLORS["dino_counts"]),
+        ("dino_counts", "n800_warmup10_lr1e5_cosfix","DINO-counts v1 + warmup",       "#2E7D32"),
+        ("dino_counts", "n800_v2bbox",               "DINO-counts v2 (bbox) + warmup",COLORS["dino_counts_v2"]),
     ]
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -290,12 +342,14 @@ def fig_pretraining_curves() -> None:
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("Generating figures...")
-    print("\n[1/4] Val vs Test R² bar chart")
+    print("\n[1/5] Val vs Test R² bar chart")
     fig_val_test_r2()
-    print("\n[2/4] Training curves")
+    print("\n[2/5] Clean test R² bar chart (paper figure)")
+    fig_test_r2_paper()
+    print("\n[3/5] Training curves")
     fig_training_curves()
-    print("\n[3/4] Predicted vs actual scatter")
+    print("\n[4/5] Predicted vs actual scatter")
     fig_scatter()
-    print("\n[4/4] Pretraining curves")
+    print("\n[5/5] Pretraining curves")
     fig_pretraining_curves()
     print(f"\nDone. Figures saved to {OUT_DIR}")
