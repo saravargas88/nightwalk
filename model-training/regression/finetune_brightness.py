@@ -606,6 +606,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-tag", type=str, default="",
                         help="Suffix appended to the output folder (e.g. 'warmup10_lr1e5'). "
                              "Lets you keep multiple runs side by side for comparison.")
+    parser.add_argument("--dino-checkpoint", type=Path, default=None,
+                        help="Override path to the dino_counts pretrained checkpoint "
+                             "(default: model-training/best_efficientnet_multihead.pt)")
     return parser.parse_args()
 
 
@@ -619,6 +622,8 @@ if __name__ == "__main__":
         DINO_LR_BACKBONE = args.lr_backbone
     if args.warmup_epochs is not None:
         DINO_WARMUP_EPOCHS = args.warmup_epochs
+    if args.dino_checkpoint is not None:
+        DINO_CHECKPOINT = args.dino_checkpoint
 
     train(
         backbone=args.backbone,
