@@ -34,6 +34,9 @@ EXAMPLE_PAIRS = [
     ("WSP arch → NYU Stern", (40.7308, -73.9973), (40.7295, -73.9930)),
     ("West Village → Astor Pl", (40.7330, -73.9990), (40.7295, -73.9910)),
     ("Bleecker St → Union Sq", (40.7280, -73.9970), (40.7355, -73.9910)),
+    ("Warren Weaver Hall → Venchi (Bleecker)", (40.7287, -73.9942), (40.7327, -74.0028)),
+    ("Bobst Library → Rubin Hall", (40.7295, -73.9971), (40.7341, -73.9938)),
+    ("Union Sq → 7th St Burger (W Village)", (40.7355, -73.9911), (40.7303, -74.0007)),
 ]
 
 # Per-pair accent colours for marker pins in the layered/grid views — keeps
