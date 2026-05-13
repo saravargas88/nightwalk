@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 """train_efficientnet_multihead_v2.py
 
 Improved EfficientNet-B0 pretraining on DINO labels with bounding box area targets.
