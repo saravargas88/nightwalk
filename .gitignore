@@ -10,6 +10,6 @@
 /daytime
 .DS_Store
 *.zip
-
+*.tex
 .claude
 image_map.html
