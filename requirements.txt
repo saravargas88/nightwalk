@@ -6,3 +6,13 @@ numpy
 matplotlib
 accelerate
 pandas
+
+# demo_app/ — lighting-aware route planning
+osmnx
+networkx
+folium
+geopandas
+shapely
+scipy
+streamlit
+streamlit-folium
