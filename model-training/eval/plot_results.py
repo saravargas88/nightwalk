@@ -52,7 +52,7 @@ plt.rcParams.update({
     "font.size": 11,
     "axes.spines.top": False,
     "axes.spines.right": False,
-    "figure.dpi": 150,
+    "figure.dpi": 300,
 })
 
 
@@ -141,9 +141,9 @@ def fig_val_test_r2() -> None:
 
     fig, ax = plt.subplots(figsize=(11, 5))
     bars_val  = ax.bar(x - w/2, val_means,  w, yerr=val_stds,  capsize=4,
-                       color=[c + "99" for c in colors], label="Val", edgecolor="none")
+                       color="none", edgecolor=colors, linewidth=1.5, label="Val")
     bars_test = ax.bar(x + w/2, test_means, w, yerr=test_stds, capsize=4,
-                       color=colors, label="Test", edgecolor="none")
+                       color=colors, edgecolor="none", label="Test")
 
     ax.set_ylabel(r"$R^2$")
     ax.set_title("Backbone ablation: validation vs. test $R^2$")
@@ -153,9 +153,9 @@ def fig_val_test_r2() -> None:
     ax.axhline(0, color="black", linewidth=0.5)
     ax.legend(frameon=False)
 
-    # Annotate test bars with value
-    for bar, m in zip(bars_test, test_means):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.015,
+    # Annotate test bars — position above the error bar cap
+    for bar, m, s in zip(bars_test, test_means, test_stds):
+        ax.text(bar.get_x() + bar.get_width() / 2, m + s + 0.018,
                 f"{m:.3f}", ha="center", va="bottom", fontsize=9)
 
     fig.tight_layout()
@@ -165,7 +165,6 @@ def fig_val_test_r2() -> None:
 
 # ── Figure 1b: Clean test R² bar chart for paper ─────────────────────────────
 def fig_test_r2_paper() -> None:
-    # Static entries including ridge baseline (no fold data needed)
     RIDGE_R2 = 0.081
 
     conditions = [
@@ -176,11 +175,7 @@ def fig_test_r2_paper() -> None:
         ("dino_counts", "n800_v2bbox",               "DINO-counts v2\n(bbox) + warmup", COLORS["dino_counts_v2"]),
     ]
 
-    labels = ["Ridge\n(DINO counts)"]
-    means  = [RIDGE_R2]
-    stds   = [0.0]
-    colors = ["#9E9E9E"]
-
+    labels, means, stds, colors = [], [], [], []
     for backbone, run, label, color in conditions:
         test_rows = load_test_summary(backbone, run)
         if not test_rows:
@@ -190,18 +185,23 @@ def fig_test_r2_paper() -> None:
         m, s = mean_std(r2s)
         labels.append(label); means.append(m); stds.append(s); colors.append(color)
 
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(7, 4))
     x = np.arange(len(labels))
     bars = ax.bar(x, means, yerr=stds, capsize=4, color=colors,
                   edgecolor="none", width=0.6)
 
-    # Annotate each bar
-    for bar, m in zip(bars, means):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+    # Annotate each bar — position above the error bar cap
+    for bar, m, s in zip(bars, means, stds):
+        ax.text(bar.get_x() + bar.get_width() / 2, m + s + 0.018,
                 f"{m:.3f}", ha="center", va="bottom", fontsize=9)
 
+    # Ridge baseline as reference line
+    ax.axhline(RIDGE_R2, color="#9E9E9E", linewidth=1.5, linestyle="--",
+               label=f"Ridge baseline ($R^2={RIDGE_R2}$)")
+    ax.legend(frameon=False, fontsize=9, loc="upper right")
+
     ax.set_ylabel(r"Test $R^2$")
-    ax.set_title(r"Brightness prediction $R^2$ by model")
+    ax.set_title(r"Brightness prediction $R^2$ by backbone initialisation")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=10)
     ax.set_ylim(0, 0.58)
@@ -220,22 +220,21 @@ def fig_test_r2_paper() -> None:
 # ── Figure 2: Val loss training curves ────────────────────────────────────────
 def fig_training_curves() -> None:
     conditions = [
-        ("imagenet",    "n800",                      "ImageNet",                      COLORS["imagenet"]),
-        ("ssl",         "n800",                      "SSL",                           COLORS["ssl"]),
-        ("dino_counts", "n800",                      "DINO-counts v1",                COLORS["dino_counts"]),
-        ("dino_counts", "n800_warmup10_lr1e5_cosfix","DINO-counts v1 + warmup",       "#2E7D32"),
-        ("dino_counts", "n800_v2bbox",               "DINO-counts v2 (bbox) + warmup",COLORS["dino_counts_v2"]),
+        ("imagenet",    "n800",                      "ImageNet",                  "#2196F3",  2.5, "-"),
+        ("ssl",         "n800",                      "SSL",                       "#FF6F00",  1.8, "--"),
+        ("dino_counts", "n800",                      "DINO-counts",               "#A5D6A7",  1.8, "--"),
+        ("dino_counts", "n800_warmup10_lr1e5_cosfix","DINO-counts + warmup",      "#2E7D32",  2.5, "-"),
+        ("dino_counts", "n800_v2bbox",               "DINO-counts v2 (bbox)",     "#9C27B0",  1.8, "--"),
     ]
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(6, 4))
 
-    for backbone, run, label, color in conditions:
+    for backbone, run, label, color, lw, ls in conditions:
         logs = load_training_logs(backbone, run)
         if not logs:
             print(f"  Skipping {backbone}/{run} (no logs)")
             continue
         max_ep = max(len(log) for log in logs)
-        # Align folds by epoch index (some folds may have fewer epochs)
         val_by_epoch = []
         for ep in range(max_ep):
             vals = [float(log[ep]["val_loss"]) for log in logs if ep < len(log)]
@@ -246,38 +245,51 @@ def fig_training_curves() -> None:
                  for v, m in zip(val_by_epoch, means)]
         epochs = list(range(1, max_ep + 1))
 
-        ax.plot(epochs, means, color=color, label=label, linewidth=2)
+        ax.plot(epochs, means, color=color, label=label, linewidth=lw, linestyle=ls)
         ax.fill_between(epochs,
-                         [m - s for m, s in zip(means, stds)],
-                         [m + s for m, s in zip(means, stds)],
-                         color=color, alpha=0.15)
+                        [m - s for m, s in zip(means, stds)],
+                        [m + s for m, s in zip(means, stds)],
+                        color=color, alpha=0.07)
 
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Validation loss (Huber)")
     ax.set_title("Fine-tuning validation loss over epochs")
+    ax.set_ylim(0.18, 0.42)
     ax.legend(frameon=False, fontsize=10)
     fig.tight_layout()
     save(fig, "fig2_training_curves")
     plt.close(fig)
 
 
-# ── Figure 3: Predicted vs actual scatter (ImageNet + DINO-counts side by side)
+# ── Figure 3: Scatter — Ridge baseline, DINO-counts, ImageNet ─────────────────
 def fig_scatter() -> None:
+    # Load ridge predictions
+    ridge_trues, ridge_preds = [], []
+    ridge_path = _MODEL_TRAINING.parent / "brightnessmetricexperiments" / "experiment_outputs" / "ridge_zscore_predictions.csv"
+    if ridge_path.exists():
+        with ridge_path.open() as f:
+            for row in csv.DictReader(f):
+                ridge_trues.append(float(row["true_target"]))
+                ridge_preds.append(float(row["pred_target"]))
+
     panels = [
-        ("imagenet", "n800",                      "ImageNet",                  COLORS["imagenet"]),
-        ("dino_counts", "n800_warmup10_lr1e5_cosfix", "DINO-counts v1\n(warmup + cosine fix)", COLORS["dino_counts"]),
+        (np.array(ridge_trues), np.array(ridge_preds), "Ridge (DINO counts)",        "#9E9E9E"),
+        ("dino_counts", "n800_warmup10_lr1e5_cosfix",  "DINO-counts v1\n+ warmup",   COLORS["dino_counts"]),
+        ("imagenet",    "n800",                         "ImageNet",                   COLORS["imagenet"]),
     ]
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
+    fig, axes = plt.subplots(1, 3, figsize=(10, 3.5))
 
-    for ax, (backbone, run, title, color) in zip(axes, panels):
-        trues, preds = load_test_predictions(backbone, run)
-        if not trues:
-            print(f"  Skipping scatter for {backbone}/{run} — no test predictions found")
-            continue
-
-        trues = np.array(trues)
-        preds = np.array(preds)
+    for ax, panel in zip(axes, panels):
+        if isinstance(panel[0], np.ndarray):
+            trues, preds, title, color = panel
+        else:
+            backbone, run, title, color = panel
+            t, p = load_test_predictions(backbone, run)
+            if not t:
+                print(f"  Skipping scatter for {backbone}/{run}")
+                continue
+            trues, preds = np.array(t), np.array(p)
 
         ss_res = ((trues - preds) ** 2).sum()
         ss_tot = ((trues - trues.mean()) ** 2).sum()
@@ -287,22 +299,85 @@ def fig_scatter() -> None:
         lo = min(trues.min(), preds.min()) - 0.2
         hi = max(trues.max(), preds.max()) + 0.2
 
-        ax.scatter(trues, preds, alpha=0.45, s=18, color=color, edgecolors="none")
-        ax.plot([lo, hi], [lo, hi], "k--", linewidth=1, label="Perfect prediction")
+        ax.scatter(trues, preds, alpha=0.35, s=14, color=color, edgecolors="none")
+        ax.plot([lo, hi], [lo, hi], "k--", linewidth=1)
         ax.set_xlabel("True brightness ($z$-score)")
         ax.set_ylabel("Predicted brightness ($z$-score)")
-        ax.set_title(title)
-        ax.set_xlim(lo, hi)
-        ax.set_ylim(lo, hi)
-        ax.text(0.05, 0.92, f"$R^2 = {r2:.3f}$\nMAE $= {mae:.3f}$",
-                transform=ax.transAxes, fontsize=11,
-                verticalalignment="top",
+        ax.set_title(title, fontsize=11)
+        ax.set_xlim(lo, hi); ax.set_ylim(lo, hi)
+        ax.text(0.05, 0.93, f"$R^2 = {r2:.3f}$\nMAE $= {mae:.3f}$",
+                transform=ax.transAxes, fontsize=10, verticalalignment="top",
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="lightgray"))
-        ax.legend(frameon=False, fontsize=9)
 
-    fig.suptitle("Test set predictions: ImageNet vs. DINO-counts backbone", fontsize=13)
+    fig.suptitle("Predicted vs. actual nighttime brightness", fontsize=13)
     fig.tight_layout()
     save(fig, "fig3_scatter_comparison")
+    plt.close(fig)
+
+
+# ── Figure 5: Ridge coefficient + per-feature scatter ─────────────────────────
+def fig_ridge_analysis() -> None:
+    import pandas as pd
+    from sklearn.linear_model import Ridge
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.model_selection import KFold
+
+    data_path = _MODEL_TRAINING.parent / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
+    if not data_path.exists():
+        print("  Skipping ridge analysis — paired_dataset_with_brightness.csv not found.")
+        return
+
+    df = pd.read_csv(data_path).dropna(subset=["dino_count_tree", "dino_count_streetlight", "dino_count_storefront", "gray_mean_zscore"])
+    features    = ["dino_count_tree", "dino_count_streetlight", "dino_count_storefront"]
+    feat_labels = ["Tree count", "Streetlight count", "Storefront count"]
+    feat_colors = ["#4CAF50", "#FFC107", "#E91E63"]
+
+    X = df[features].values.astype(float)
+    y = df["gray_mean_zscore"].values.astype(float)
+
+    # 5-fold coefficients
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    fold_coefs = []
+    for train_idx, _ in kf.split(X):
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X[train_idx])
+        ridge = Ridge(alpha=1.0)
+        ridge.fit(X_train, y[train_idx])
+        fold_coefs.append(ridge.coef_)
+
+    fold_coefs = np.array(fold_coefs)
+    coef_means = fold_coefs.mean(axis=0)
+    coef_stds  = fold_coefs.std(axis=0)
+
+    fig, axes = plt.subplots(1, 3, figsize=(10, 3.5))
+
+    # Panels 0–2: per-feature scatter with regression line
+    for i, (feat, label, color) in enumerate(zip(features, feat_labels, feat_colors)):
+        ax = axes[i]
+        xi_feat = df[feat].values.astype(float)
+        # jitter x slightly for overplotting
+        jitter = np.random.default_rng(42).uniform(-0.15, 0.15, size=len(xi_feat))
+        ax.scatter(xi_feat + jitter, y, alpha=0.25, s=10, color=color, edgecolors="none")
+
+        # regression line
+        xfit = np.linspace(xi_feat.min(), xi_feat.max(), 100)
+        from numpy.polynomial.polynomial import polyfit as npfit
+        c0, c1 = npfit(xi_feat, y, 1)
+        ax.plot(xfit, c0 + c1 * xfit, color="black", linewidth=1.5)
+
+        # Pearson r
+        r = float(np.corrcoef(xi_feat, y)[0, 1])
+        ax.text(0.97, 0.97, f"$r = {r:.2f}$", transform=ax.transAxes,
+                fontsize=9, ha="right", va="top",
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="lightgray"))
+
+        ax.set_xlabel(label, fontsize=10)
+        ax.set_ylabel("Brightness ($z$-score)" if i == 0 else "", fontsize=10)
+        ax.set_title(f"{label}\n$\\beta = {coef_means[i]:.3f} \\pm {coef_stds[i]:.3f}$", fontsize=10)
+
+    fig.suptitle("Ridge baseline: feature coefficients and predictive power", fontsize=11)
+    fig.tight_layout()
+    save(fig, "fig5_ridge_analysis")
     plt.close(fig)
 
 
@@ -350,6 +425,8 @@ if __name__ == "__main__":
     fig_training_curves()
     print("\n[4/5] Predicted vs actual scatter")
     fig_scatter()
-    print("\n[5/5] Pretraining curves")
+    print("\n[5/5] Ridge coefficient + feature analysis")
+    fig_ridge_analysis()
+    print("\n[6/6] Pretraining curves")
     fig_pretraining_curves()
     print(f"\nDone. Figures saved to {OUT_DIR}")
