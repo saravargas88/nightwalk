@@ -13,3 +13,17 @@
 *.tex
 .claude
 image_map.html
+
+# demo_app generated artifacts
+demo_app/data/*.graphml
+demo_app/data/*.html
+demo_app/data/predictions.csv
+demo_app/data/edge_lighting.csv
+demo_app/data/edge_predictions.csv
+demo_app/route_viewer*.html
+demo_app/examples/
+demo_app/__pycache__/
+
+# python bytecode caches anywhere under model-training/
+model-training/**/__pycache__/
+model-training/__pycache__/
